@@ -1,0 +1,27 @@
+{
+  "name": "Généraliste",
+  "version": "1.0",
+  "language": "fr",
+  "weights": {
+    "hard_skills": 1.0,
+    "soft_skills": 0.6,
+    "tools": 0.9,
+    "certifications": 0.8,
+    "education": 0.4
+  },
+  "stopwords": [
+    "motiv\u00e9", "motivation", "dynamique", "rigoureux", "autonome",
+    "exp\u00e9rience", "missions", "poste", "entreprise", "profil"
+  ],
+  "synonyms": {
+    "gestion de projet": ["chef de projet", "project management", "pm", "pmo"],
+    "communication": ["aisance relationnelle", "relationnel"],
+    "excel": ["microsoft excel", "tableur"],
+    "word": ["microsoft word"],
+    "powerpoint": ["microsoft powerpoint", "ppt"]
+  },
+  "strong_keywords": [
+    "gestion", "analyse", "reporting", "organisation", "coordination",
+    "am\u00e9lioration continue", "proc\u00e9dures"
+  ]
+}

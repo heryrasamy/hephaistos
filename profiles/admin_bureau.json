@@ -1,0 +1,27 @@
+{
+  "name": "Administratif / Bureau",
+  "version": "1.0",
+  "language": "fr",
+  "weights": {
+    "hard_skills": 1.0,
+    "soft_skills": 0.7,
+    "tools": 1.0,
+    "certifications": 0.6,
+    "education": 0.5
+  },
+  "stopwords": [
+    "motiv\u00e9", "dynamique", "souriant", "autonome",
+    "exp\u00e9rience", "missions", "poste", "entreprise", "profil"
+  ],
+  "synonyms": {
+    "accueil": ["r\u00e9ception", "standard", "front office"],
+    "facturation": ["factures", "devis", "relances"],
+    "comptabilite": ["comptabilit\u00e9", "saisie comptable"],
+    "pack office": ["microsoft office", "office", "word", "excel", "powerpoint"],
+    "gestion": ["administration", "suivi", "coordination"]
+  },
+  "strong_keywords": [
+    "saisie", "facturation", "accueil", "planning", "classement",
+    "courrier", "relance", "organisation"
+  ]
+}

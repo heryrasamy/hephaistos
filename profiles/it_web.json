@@ -1,0 +1,29 @@
+{
+  "name": "IT / Web / Support",
+  "version": "1.0",
+  "language": "fr",
+  "weights": {
+    "hard_skills": 1.1,
+    "soft_skills": 0.5,
+    "tools": 1.1,
+    "certifications": 0.9,
+    "education": 0.3
+  },
+  "stopwords": [
+    "passion", "curieux", "veille", "dynamique", "autonome",
+    "exp\u00e9rience", "missions", "poste", "entreprise", "profil"
+  ],
+  "synonyms": {
+    "python": ["python3"],
+    "javascript": ["js", "node", "nodejs"],
+    "support": ["helpdesk", "hotline", "support utilisateur"],
+    "reseau": ["r\u00e9seau", "tcp/ip", "dns", "dhcp"],
+    "linux": ["debian", "ubuntu", "kali"],
+    "git": ["github", "gitlab"],
+    "cloud": ["azure", "aws", "gcp"]
+  },
+  "strong_keywords": [
+    "python", "sql", "api", "linux", "windows", "active directory",
+    "docker", "kubernetes", "support", "cybers\u00e9curit\u00e9"
+  ]
+}
