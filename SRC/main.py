@@ -1,9 +1,9 @@
 import streamlit as st
-import requests
-
 from cv_extract import extract_text_from_upload
 from matching_simple import score_cv_offer
-from offers_phase1 import fetch_offers_francetravail, add_location_params
+from offers_phase1 import fetch_offers_francetravail
+from francetravail_api import get_access_token, search_communes
+from location_helper import filter_communes, format_commune_label
 
 st.set_page_config(page_title="Hephaistos", layout="wide")
 
@@ -46,45 +46,141 @@ def to_score(x) -> int:
         return int(float(x))
     except Exception:
         return 0
-
-
-def resolve_commune_code(code_postal: str, ville: str) -> str | None:
-    """Résout un code INSEE de commune via geo.api.gouv.fr."""
-    code_postal = (code_postal or "").strip()
-    ville = (ville or "").strip()
-
-    try:
-        if code_postal:
-            r = requests.get(
-                "https://geo.api.gouv.fr/communes",
-                params={"codePostal": code_postal, "fields": "code,nom", "format": "json"},
-                timeout=10,
-            )
-            r.raise_for_status()
-            data = r.json()
-            if data:
-                return data[0].get("code")
-
-        if ville:
-            r = requests.get(
-                "https://geo.api.gouv.fr/communes",
-                params={"nom": ville, "boost": "population", "fields": "code,nom", "format": "json"},
-                timeout=10,
-            )
-            r.raise_for_status()
-            data = r.json()
-            if data:
-                return data[0].get("code")
-
-    except Exception:
-        return None
-
-    return None
-
-
 # ================================
 # 1) IMPORT CV
 # ================================
+def classify_term(term: str) -> str:
+    """
+    Classe un terme manquant dans une grande catégorie
+    pour produire une suggestion générique et honnête.
+    """
+    t = (term or "").lower().strip()
+
+    software_keywords = {
+        "excel", "word", "powerpoint", "outlook", "sap", "salesforce",
+        "wordpress", "canva", "photoshop", "illustrator", "indesign",
+        "premiere", "premiere pro", "google analytics", "sql", "python",
+        "java", "html", "css", "capcut", "drupal", "suite adobe"
+    }
+
+    soft_skills_keywords = {
+        "autonomie", "rigueur", "organisation", "communication",
+        "travail equipe", "travail en equipe", "adaptabilite",
+        "adaptation", "relationnel", "esprit analyse", "analyse",
+        "proactivite", "force proposition"
+    }
+
+    language_keywords = {
+        "anglais", "espagnol", "allemand", "italien", "bilingue", "toeic", "toefl"
+    }
+
+    diploma_keywords = {
+        "bac", "master", "licence", "bts", "dut", "formation",
+        "certification", "diplome"
+    }
+
+    management_keywords = {
+        "gestion", "coordination", "pilotage", "organisation", "suivi",
+        "planification", "planning", "encadrement"
+    }
+
+    client_keywords = {
+        "client", "vente", "accueil", "service", "support",
+        "relation client", "conseil"
+    }
+
+    analysis_keywords = {
+        "analyse", "donnees", "data", "reporting", "tableau de bord",
+        "indicateur", "analytics"
+    }
+
+    if any(k in t for k in software_keywords):
+        return "software"
+    if any(k in t for k in language_keywords):
+        return "language"
+    if any(k in t for k in diploma_keywords):
+        return "diploma"
+    if any(k in t for k in soft_skills_keywords):
+        return "soft_skill"
+    if any(k in t for k in management_keywords):
+        return "management"
+    if any(k in t for k in client_keywords):
+        return "client"
+    if any(k in t for k in analysis_keywords):
+        return "analysis"
+
+    return "generic"
+
+
+def suggest_for_term(term: str, category: str) -> str:
+    """
+    Génère une suggestion honnête à partir d'un terme manquant
+    et de sa catégorie.
+    """
+    if category == "software":
+        return (
+            f"Si vous maîtrisez réellement « {term} », citez-le explicitement "
+            f"dans une expérience ou dans la rubrique compétences."
+        )
+
+    if category == "language":
+        return (
+            f"Si « {term} » correspond à votre profil, indiquez-le avec un niveau précis sur le CV."
+        )
+
+    if category == "diploma":
+        return (
+            f"Vérifiez que « {term} » est visible rapidement dans la partie formation ou certifications."
+        )
+
+    if category == "soft_skill":
+        return (
+            f"Pour « {term} », privilégiez un exemple concret dans une expérience plutôt qu’une simple liste de qualités."
+        )
+
+    if category == "management":
+        return (
+            f"Si vous avez réellement exercé « {term} », reformulez une mission pour le faire apparaître plus clairement."
+        )
+
+    if category == "client":
+        return (
+            f"Si « {term} » fait partie de votre expérience, mettez-le en avant dans une mission ou un résultat concret."
+        )
+
+    if category == "analysis":
+        return (
+            f"Si vous avez déjà réalisé « {term} », précisez-le dans une expérience avec un exemple concret."
+        )
+
+    return (
+        f"Vérifiez si « {term} » correspond à une compétence ou mission réelle déjà présente, "
+        f"et reformulez-la plus explicitement si nécessaire."
+    )
+
+
+def build_cv_suggestions(matched, missing, max_suggestions: int = 6):
+    """
+    Construit une liste de suggestions génériques pour améliorer le CV
+    sans inventer d'expérience ni de compétence.
+    """
+    suggestions = []
+
+    for term in missing[:12]:
+        category = classify_term(term)
+        suggestion = suggest_for_term(term, category)
+        suggestions.append(suggestion)
+
+    # Supprime les doublons tout en gardant l'ordre
+    unique = []
+    seen = set()
+
+    for s in suggestions:
+        if s not in seen:
+            seen.add(s)
+            unique.append(s)
+
+    return unique[:max_suggestions]
 st.subheader("1) Importer votre CV")
 
 uploaded = st.file_uploader(
@@ -107,15 +203,49 @@ if uploaded:
 # ================================
 # 2) PHASE 1 — RECHERCHE OFFRES
 # ================================
+# ================================
+# 2) PHASE 1 — RECHERCHE OFFRES
+# ================================
 st.subheader("2) Phase 1 — Trouver des offres (France Travail)")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    code_postal = st.text_input("Code postal (recommandé)", value="")
-with col2:
-    ville = st.text_input("Ville (optionnel)", value="")
-with col3:
-    rayon_km = st.slider("Rayon autour du lieu (km)", 0, 100, 10)
+st.write("Localisation")
+
+location_query = st.text_input(
+    "Code postal, début de code postal, département ou ville",
+    value="75",
+    help="Exemples : 75, 75011, Paris, Toulouse"
+)
+
+rayon_km = st.slider("Rayon autour du lieu (km)", 0, 100, 10)
+
+selected_commune = None
+
+if location_query.strip():
+    try:
+        token = get_access_token()
+        all_communes = search_communes(token)
+        suggestions = filter_communes(all_communes, location_query, limit=20)
+
+        if suggestions:
+            selected_label = st.selectbox(
+                "Suggestions de communes",
+                options=[format_commune_label(c) for c in suggestions]
+            )
+
+            selected_commune = next(
+                c for c in suggestions
+                if format_commune_label(c) == selected_label
+            )
+
+            st.caption(
+                f"Commune sélectionnée : {selected_commune['libelle']} | "
+                f"CP {selected_commune['codePostal']}"
+            )
+        else:
+            st.warning("Aucune commune trouvée pour cette saisie.")
+
+    except Exception as e:
+        st.error(f"Erreur référentiel communes : {e}")
 
 keywords = st.text_input(
     "Mots-clés (séparés par virgules)",
@@ -132,43 +262,58 @@ max_results = st.selectbox(
 
 # Bouton principal
 if st.button("Rechercher et classer"):
+    params = {
+        "motsCles": keywords,
+        "publieeDepuis": days,
+    }
 
-    commune_code = resolve_commune_code(code_postal, ville)
+    if selected_commune:
+        params["commune"] = selected_commune["code"]
+        params["distance"] = rayon_km
 
-    params = {"motsCles": keywords}
-    params = add_location_params(params, commune_code, rayon_km)
+    try:
+        offers_raw, content_range = fetch_offers_francetravail(
+            params=params,
+            max_results=max_results,
+        )
 
-    offers_raw, content_range = fetch_offers_francetravail(
-        params=params,
-        max_results=max_results,
-    )
+        st.success(f"Offres récupérées : {len(offers_raw)}")
 
-    st.success(f"Offres récupérées : {len(offers_raw)}")
+        scored = []
 
-    scored = []
-    for o in offers_raw:
-        description = to_text(o.get("description", ""))
-        profile = to_text(o.get("profile", ""))
+        for o in offers_raw:
+            description = to_text(o.get("text", ""))
 
-        result = score_cv_offer(to_text(cv_text), description, profile)
+            result = score_cv_offer(
+                to_text(cv_text),
+                description,
+                {}
+            )
 
-        oo = dict(o)
-        oo["score"] = int(getattr(result, "score", 0))
-        oo["match_result"] = result
-        scored.append(oo)
+            oo = dict(o)
+            oo["score"] = int(getattr(result, "score", 0))
+            oo["match_result"] = result
 
-    scored.sort(key=lambda x: x.get("score", 0), reverse=True)
-    st.session_state["offers_scored"] = scored
+            scored.append(oo)
 
+        scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+        st.session_state["offers_scored"] = scored
+
+    except Exception as e:
+        st.error(f"Erreur lors de la recherche d'offres : {e}")
 # ================================
 # 2b) TOP 30
 # ================================
 offers_scored = st.session_state.get("offers_scored", [])
+
 if offers_scored:
+
     top = offers_scored[:30]
+
     st.subheader("Top 30 (triées par compatibilité)")
 
     for i, o in enumerate(top):
+
         title = o.get("title", "Sans titre")
         company = o.get("company", "")
         location = o.get("location", "")
@@ -177,14 +322,15 @@ if offers_scored:
 
         st.write(f"**{score}/100 — {title}**")
         st.write(f"{company} — {location}")
+
         if url:
             st.write(url)
 
         if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
-            st.session_state["offer_text"] = to_text(o.get("description", ""))
+            st.session_state["offer_text"] = to_text(o.get("text", ""))
 
         with st.expander("Voir description", expanded=False):
-            st.write(to_text(o.get("description", "Description non disponible")))
+            st.write(to_text(o.get("text", "Description non disponible")))
 
 
 # ================================
@@ -203,20 +349,58 @@ offer_text = st.text_area(
 # ================================
 st.subheader("4) Analyser CV vs Offre")
 
+# récupérer la dernière analyse si elle existe
+result = st.session_state.get("last_analysis", None)
+
 if st.button("Analyser CV vs Offre"):
+
     if not cv_text:
         st.warning("Importer un CV d'abord.")
+
     elif not offer_text.strip():
         st.warning("Aucune offre fournie.")
+
     else:
-        result = score_cv_offer(to_text(cv_text), to_text(offer_text), "")
+        result = score_cv_offer(to_text(cv_text), to_text(offer_text), {})
 
-        st.metric("Score de compatibilité", f"{int(getattr(result, 'score', 0))}/100")
+        # mémoriser l'analyse
+        st.session_state["last_analysis"] = result
 
-        matched = getattr(result, "matched", [])
-        missing = getattr(result, "missing", [])
-        strong_hits = getattr(result, "strong_hits", [])
 
-        st.write("Forces (mots trouvés):", matched[:30])
-        st.write("Manques (mots absents):", missing[:30])
-        st.write("Mots forts:", strong_hits[:30])
+# afficher l'analyse si elle existe
+if result:
+
+    st.metric("Score de compatibilité", f"{int(getattr(result, 'score', 0))}/100")
+
+    matched = getattr(result, "matched", [])
+    missing = getattr(result, "missing", [])
+    strong_hits = getattr(result, "strong_hits", [])
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### Forces (mots trouvés)")
+        for m in matched[:30]:
+            st.write("✔", m)
+
+    with col2:
+        st.markdown("### Manques (mots absents)")
+        for m in missing[:30]:
+            st.write("✖", m)
+
+    st.markdown("### Mots forts")
+
+    if strong_hits:
+        for m in strong_hits[:30]:
+            st.write("⭐", m)
+    else:
+        st.write("Aucun mot fort détecté.")
+
+    suggestions = build_cv_suggestions(matched, missing)
+
+    st.markdown("### Suggestions pour améliorer le CV")
+
+    if suggestions:
+        for s in suggestions:
+            st.write("•", s)
+            

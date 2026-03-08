@@ -94,3 +94,23 @@ def normalize_offer(raw: Dict[str, Any]) -> Dict[str, Any]:
         "url": origine.get("urlOrigine", "") if isinstance(origine, dict) else "",
         "text": raw.get("description", "") or "",
     }
+REFERENTIEL_COMMUNES_URL = f"{BASE_URL}/v2/referentiel/communes"
+
+
+def search_communes(token: str) -> list[dict]:
+    """
+    Récupère le référentiel des communes.
+    Le référentiel renvoie une liste d'objets avec:
+    - code (code INSEE)
+    - libelle (nom commune)
+    - codePostal
+    - codeDepartement
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+
+    r = requests.get(REFERENTIEL_COMMUNES_URL, headers=headers, timeout=30)
+    r.raise_for_status()
+    return r.json()
