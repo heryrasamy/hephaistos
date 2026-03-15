@@ -2,193 +2,451 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
-from typing import Any, Dict, List, Set
+from collections import defaultdict
+from typing import Dict, List, Set, Tuple
 
 
-# Réglages
-MIN_LEN = 3
-MAX_TERMS_PER_LIST = 20
-MAX_STRONG = 15
+# =========================================================
+# Stopwords simples
+# =========================================================
+STOPWORDS = {
+    "de", "des", "du", "la", "le", "les", "un", "une", "et", "ou", "en", "au", "aux",
+    "pour", "par", "avec", "sans", "sur", "sous", "dans", "chez", "vers", "entre",
+    "a", "à", "d", "l", "the", "and", "of", "to", "in", "on",
+    "est", "sont", "etre", "être", "avoir", "faire", "plus", "moins",
+    "ce", "cet", "cette", "ces", "son", "sa", "ses", "leur", "leurs",
+    "vos", "notre", "nos", "votre", "mes", "tes", "je", "tu", "il", "elle", "nous", "vous",
+}
+
+# =========================================================
+# Familles métier
+# La clé = noyau canonique
+# La valeur = ensemble de formulations proches
+# =========================================================
+JOB_FAMILIES: Dict[str, Set[str]] = {
+    "administratif": {
+        "administratif",
+        "assistante administrative",
+        "assistant administratif",
+        "agent administratif",
+        "secretaire administrative",
+        "secretaire administratif",
+        "gestion administrative",
+        "taches administratives",
+        "travaux administratifs",
+        "suivi administratif",
+        "dossier administratif",
+        "gestion de dossiers",
+        "saisie de documents",
+        "saisie administrative",
+    },
+
+    "accueil": {
+        "accueil",
+        "agent d accueil",
+        "charge d accueil",
+        "hote d accueil",
+        "hotesse d accueil",
+        "accueil physique",
+        "accueil telephonique",
+        "standard",
+        "standard telephonique",
+        "orientation du public",
+        "relation usager",
+        "relation client",
+        "service client",
+        "contact client",
+        "conseil client",
+    },
+
+    "planning": {
+        "planning",
+        "prise de rendez vous",
+        "gestion des rendez vous",
+        "gestion de rendez vous",
+        "suivi des plannings",
+        "gestion de planning",
+        "gestion des plannings",
+        "organisation planning",
+        "organisation",
+        "agenda",
+        "gestion d agenda",
+        "coordination",
+    },
+
+    "stock": {
+        "stock",
+        "gestion des stocks",
+        "gestion de stock",
+        "suivi des stocks",
+        "stockage",
+        "inventaire",
+        "approvisionnement",
+        "magasinage",
+        "gestion magasin",
+    },
+
+    "bureautique": {
+        "bureautique",
+        "word",
+        "excel",
+        "powerpoint",
+        "outlook",
+        "pack office",
+        "microsoft office",
+    },
+
+    "vente": {
+        "vente",
+        "vente en magasin",
+        "vente conseil",
+        "conseil de vente",
+        "commercial",
+        "relation commerciale",
+    },
+
+    "caisse": {
+        "caisse",
+        "encaissement",
+        "tenue de caisse",
+        "gestion de caisse",
+    },
+
+    "support": {
+        "support",
+        "assistance",
+        "support client",
+        "support utilisateur",
+        "assistance utilisateur",
+        "service support",
+        "helpdesk",
+    },
+
+    "informatique": {
+        "informatique",
+        "support informatique",
+        "maintenance informatique",
+        "technicien informatique",
+        "outils informatiques",
+        "logiciel",
+        "application",
+    },
+
+    "logistique": {
+        "logistique",
+        "preparation de commandes",
+        "expedition",
+        "reception",
+        "manutention",
+        "gestion logistique",
+        "flux",
+    },
+
+    "communication": {
+        "communication",
+        "redaction",
+        "contenu",
+        "animation",
+        "reseaux sociaux",
+        "creation de contenu",
+        "communication digitale",
+    },
+
+    "rigueur": {
+        "rigueur",
+    },
+
+    "autonomie": {
+        "autonomie",
+    },
+
+    "polyvalence": {
+        "polyvalence",
+    },
+}
 
 
-BASE_STOPWORDS_FR = [
-    "le", "la", "les", "de", "des", "du", "un", "une", "et", "ou", "avec", "sans", "pour", "par",
-    "sur", "sous", "dans", "en", "au", "aux", "ce", "cet", "cette", "ces", "qui", "que", "quoi",
-    "dont", "plus", "moins", "tres", "très", "afin", "etre", "être", "avoir", "faire", "sera",
-    "sont", "nous", "vous", "ils", "elles", "leur", "leurs", "vos", "notre", "votre",
-    "poste", "profil", "mission", "missions", "entreprise", "societe", "société",
-    "experience", "expérience", "an", "annee", "année", "mois", "jour", "jours",
-    "temps", "heures", "heure", "semaine", "semaines"
-]
+# =========================================================
+# Génération automatique des synonymes
+# variante -> noyau canonique
+# =========================================================
+SYNONYM_MAP: Dict[str, str] = {}
+
+for canonical, variants in JOB_FAMILIES.items():
+    for variant in variants:
+        SYNONYM_MAP[variant] = canonical
 
 
-def _strip_accents(s: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
-    )
+# =========================================================
+# Reverse map : noyau canonique -> variantes
+# =========================================================
+CANONICAL_TO_VARIANTS: Dict[str, Set[str]] = defaultdict(set)
+
+for canonical, variants in JOB_FAMILIES.items():
+    CANONICAL_TO_VARIANTS[canonical].add(canonical)
+    for variant in variants:
+        CANONICAL_TO_VARIANTS[canonical].add(variant)
+
+# =========================================================
+# Outils de normalisation
+# =========================================================
+def strip_accents(text: str) -> str:
+    text = unicodedata.normalize("NFD", text)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
 
 
-def normalize(text: Any) -> str:
+def normalize(text: str) -> str:
     """
-    Normalise le texte pour le matching :
-    - cast vers str
-    - minuscule
-    - suppression des accents
-    - remplacement de la ponctuation par des espaces
-    - compactage des espaces
+    Normalisation unique du fichier :
+    - minuscules
+    - suppression accents
+    - apostrophes et tirets simplifiés
+    - caractères non alphanumériques remplacés par espace
+    - espaces multiples réduits
     """
-    if text is None:
-        text = ""
-    elif not isinstance(text, str):
-        if isinstance(text, (list, tuple)):
-            text = " ".join(str(x) for x in text if x is not None)
-        else:
-            text = str(text)
+    if not text:
+        return ""
 
-    text = _strip_accents(text.lower())
+    text = text.lower().strip()
+    text = strip_accents(text)
 
-    # Remplace certains séparateurs fréquents par des espaces
-    text = re.sub(r"[/|\\,_;:()\[\]{}]+", " ", text)
+    text = text.replace("’", "'")
+    text = text.replace("-", " ")
+    text = text.replace("/", " ")
 
-    # Remplace les tirets et apostrophes par des espaces
-    text = re.sub(r"[-'’]+", " ", text)
+    # ex: d'accueil -> d accueil
+    text = re.sub(r"[']", " ", text)
 
-    # Supprime tout caractère non alphanumérique restant, sauf espace
-    text = re.sub(r"[^a-z0-9\s]+", " ", text)
+    # garde lettres/chiffres/espaces
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
 
-    # Compacte les espaces
+    # compacte les espaces
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 
-def _has_digit(token: str) -> bool:
-    return any(ch.isdigit() for ch in token)
-
-
-def build_syn_map(profile: Dict[str, Any]) -> Dict[str, str]:
+def normalize_with_synonyms(term: str) -> str:
     """
-    Construit une map {variant_normalise: canonical_normalise}
+    Normalise un terme puis applique la forme canonique si connue.
     """
-    syn = profile.get("synonyms", {}) or {}
-    mapping: Dict[str, str] = {}
-
-    for canonical, variants in syn.items():
-        c = normalize(canonical)
-        if not c:
-            continue
-
-        mapping[c] = c
-
-        for v in variants or []:
-            v2 = normalize(v)
-            if v2:
-                mapping[v2] = c
-
-    return mapping
+    term_n = normalize(term)
+    return SYNONYM_MAP.get(term_n, term_n)
 
 
-def _profile_stopwords(profile: Dict[str, Any]) -> Set[str]:
-    """
-    Retourne les stopwords normalisés.
-    Version simple et robuste.
-    """
-    combined = " ".join(BASE_STOPWORDS_FR)
-    norm = normalize(combined)
-    return set(norm.split()) if norm else set()
-
-
-def _tokenize(text: str) -> List[str]:
-    """
-    Découpe le texte normalisé en tokens simples.
-    """
+# =========================================================
+# Extraction de termes
+# =========================================================
+def tokenize(text: str) -> List[str]:
+    text = normalize(text)
     if not text:
         return []
-    return [tok for tok in text.split() if tok]
+    return [tok for tok in text.split() if tok and tok not in STOPWORDS and len(tok) >= 2]
 
 
-def extract_terms(text: str, profile: Dict[str, Any]) -> Set[str]:
+def build_ngrams(tokens: List[str], min_n: int = 1, max_n: int = 4) -> Set[str]:
     """
-    Extrait des termes utiles (mots + bigrams) avec nettoyage :
-    - supprime stopwords
-    - supprime tokens courts
-    - supprime tokens contenant des chiffres
-    - applique synonymes
+    Génère des n-grammes simples jusqu'à 4 mots.
     """
-    stop = _profile_stopwords(profile)
-    synmap = build_syn_map(profile)
+    grams: Set[str] = set()
+    n_tokens = len(tokens)
 
-    t = normalize(text)
-    if not t:
+    for n in range(min_n, max_n + 1):
+        for i in range(n_tokens - n + 1):
+            gram = " ".join(tokens[i:i + n]).strip()
+            if gram:
+                grams.add(gram)
+
+    return grams
+
+
+def extract_terms(text: str) -> Set[str]:
+    """
+    Extrait un ensemble de termes utiles à comparer :
+    - mots significatifs
+    - groupes de mots (1 à 4 mots)
+    - variantes reconnues dans SYNONYM_MAP
+
+    Le but n'est pas d'être 'parfait', mais stable et robuste.
+    """
+    if not text:
         return set()
 
-    raw_tokens = _tokenize(t)
+    tokens = tokenize(text)
+    if not tokens:
+        return set()
 
-    tokens = [
-        tok for tok in raw_tokens
-        if len(tok) >= MIN_LEN
-        and tok not in stop
-        and not tok.isdigit()
-        and not _has_digit(tok)
-    ]
+    candidates = build_ngrams(tokens, min_n=1, max_n=4)
 
-    words = set(tokens)
-    bigrams = {f"{tokens[i]} {tokens[i + 1]}" for i in range(len(tokens) - 1)}
+    # On filtre un peu les n-grammes très peu informatifs
+    cleaned: Set[str] = set()
+    for term in candidates:
+        if len(term) < 2:
+            continue
 
-    all_terms = words | bigrams
+        words = term.split()
 
-    return {synmap.get(term, term) for term in all_terms}
+        # on évite les groupes composés uniquement de mini-mots
+        if all((w in STOPWORDS or len(w) < 2) for w in words):
+            continue
+
+        cleaned.add(term)
+
+    return cleaned
 
 
-def _rank_terms(terms: Set[str]) -> List[str]:
+# =========================================================
+# Enrichissement des termes par équivalences métier
+# =========================================================
+def expand_terms_with_equivalents(terms: Set[str]) -> Set[str]:
     """
-    Trie :
-    - expressions d'abord
-    - puis longueur décroissante
-    - puis ordre alpha
+    Pour chaque terme :
+    - ajoute sa version normalisée
+    - ajoute sa forme canonique
+    - ajoute les variantes du même groupe canonique
+
+    Exemple :
+    'assistante administrative'
+      -> 'assistante administrative'
+      -> 'assistant administratif'
+      -> autres variantes du même groupe
     """
-    return sorted(terms, key=lambda s: (-s.count(" "), -len(s), s))
+    expanded: Set[str] = set()
 
+    for term in terms:
+        term_n = normalize(term)
+        if not term_n:
+            continue
 
-@dataclass(frozen=True)
-class MatchResult:
-    score: int
-    matched: List[str]
-    missing: List[str]
-    strong_hits: List[str]
+        expanded.add(term_n)
 
+        canonical = normalize_with_synonyms(term_n)
+        expanded.add(canonical)
 
-def score_cv_offer(cv_text: str, offer_text: str, profile: Dict[str, Any]) -> MatchResult:
-    profile = dict(profile or {})  # copie défensive
+        if canonical in CANONICAL_TO_VARIANTS:
+            expanded.update(CANONICAL_TO_VARIANTS[canonical])
 
-    cv_terms = extract_terms(cv_text, profile)
-    offer_terms = extract_terms(offer_text, profile)
+    return expanded
 
-    matched_set = cv_terms & offer_terms
-    missing_set = offer_terms - cv_terms
+def detect_cv_job_families(cv_text: str) -> Dict[str, int]:
+    """
+    Détecte les familles métier dominantes dans un CV.
+    Retourne un dictionnaire :
+    {famille_metier: nombre_d_occurrences}
+    """
 
-    matched = _rank_terms(matched_set)[:MAX_TERMS_PER_LIST]
-    missing = _rank_terms(missing_set)[:MAX_TERMS_PER_LIST]
+    terms = extract_terms(cv_text)
+    terms = expand_terms_with_equivalents(terms)
 
-    # Mots-clés forts (bonus)
-    strong = [normalize(s) for s in (profile.get("strong_keywords", []) or [])]
-    strong_hits = sorted(
-        [s for s in strong if s and s in cv_terms and s in offer_terms]
-    )[:MAX_STRONG]
+    families_count: Dict[str, int] = {}
 
-    # Score de base = couverture des termes de l'offre
-    denom = max(len(offer_terms), 1)
-    base = int(round((len(matched_set) / denom) * 100))
+    for t in terms:
+        family = SYNONYM_MAP.get(t)
+        if family:
+            families_count[family] = families_count.get(family, 0) + 1
 
-    # Bonus léger pour mots forts
-    bonus = min(len(strong_hits) * 3, 15)
+    return families_count
+def get_top_cv_families(cv_text: str, top_n: int = 3) -> List[str]:
+    """
+    Retourne les familles métier les plus présentes dans le CV.
+    """
 
-    score = max(0, min(100, base + bonus))
+    families_count = detect_cv_job_families(cv_text)
 
-    return MatchResult(
-        score=score,
-        matched=matched,
-        missing=missing,
-        strong_hits=strong_hits
+    sorted_families = sorted(
+        families_count.items(),
+        key=lambda x: x[1],
+        reverse=True
     )
+
+    return [f[0] for f in sorted_families[:top_n]]
+# =========================================================
+# Scoring CV ↔ offre
+# =========================================================
+def score_cv_offer(cv_text: str, offer_text: str) -> Dict[str, object]:
+    """
+    Compare un CV et une offre avec :
+    - extraction des termes
+    - normalisation
+    - synonymes / équivalences métier
+    - calcul d'un score de compatibilité
+    """
+
+    cv_raw_terms = extract_terms(cv_text)
+    offer_raw_terms = extract_terms(offer_text)
+
+    cv_terms = expand_terms_with_equivalents(cv_raw_terms)
+    offer_terms = expand_terms_with_equivalents(offer_raw_terms)
+
+    # garder les termes pertinents
+    def is_relevant(term: str) -> bool:
+        return (" " in term) or (len(term) >= 4)
+
+    cv_terms = {t for t in cv_terms if is_relevant(t)}
+    offer_terms = {t for t in offer_terms if is_relevant(t)}
+
+    matched = cv_terms & offer_terms
+    missing = offer_terms - cv_terms
+
+    # Score de couverture
+    if offer_terms:
+        coverage_score = round((len(matched) / len(offer_terms)) * 100)
+    else:
+        coverage_score = 0
+
+    # Bonus expressions métier
+    long_matches = {t for t in matched if " " in t}
+    bonus = min(len(long_matches) * 5, 20)
+
+    # Détection des familles métier
+    cv_families = {SYNONYM_MAP.get(t, t) for t in cv_terms if t in SYNONYM_MAP}
+    offer_families = {SYNONYM_MAP.get(t, t) for t in offer_terms if t in SYNONYM_MAP}
+
+    common_families = cv_families & offer_families
+    family_bonus = min(len(common_families) * 5, 15)
+
+    final_score = min(coverage_score + bonus + family_bonus, 100)
+
+    return {
+        "score": final_score,
+        "coverage_score": coverage_score,
+        "bonus": bonus,
+        "family_bonus": family_bonus,
+        "common_families": sorted(common_families),
+        "matched_terms": sorted(matched),
+        "missing_terms": sorted(missing),
+        "cv_terms": sorted(cv_terms),
+        "offer_terms": sorted(offer_terms),
+    }
+def detect_cv_job_families(cv_text: str) -> Dict[str, int]:
+    """
+    Détecte les familles métier présentes dans un CV
+    et compte leur fréquence.
+    """
+
+    terms = extract_terms(cv_text)
+    terms = expand_terms_with_equivalents(terms)
+
+    families_count: Dict[str, int] = {}
+
+    for t in terms:
+        family = SYNONYM_MAP.get(t)
+        if family:
+            families_count[family] = families_count.get(family, 0) + 1
+
+    return families_count
+
+
+def get_top_cv_families(cv_text: str, top_n: int = 3) -> List[str]:
+    """
+    Retourne les familles métier les plus fréquentes dans le CV.
+    """
+
+    families_count = detect_cv_job_families(cv_text)
+
+    sorted_families = sorted(
+        families_count.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    return [f[0] for f in sorted_families[:top_n]]

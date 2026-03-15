@@ -1,7 +1,8 @@
 from __future__ import annotations
-
 from io import BytesIO
 from typing import Tuple
+import io
+
 
 
 def extract_text_from_upload(filename: str, file_bytes: bytes) -> Tuple[str, str]:

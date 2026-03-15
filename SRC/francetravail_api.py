@@ -43,7 +43,7 @@ def get_access_token() -> str:
 
 
 def search_offers(token: str, params: dict, range_query: str):
-    url = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"  # garde ton URL si elle diffère
+    url = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -53,29 +53,45 @@ def search_offers(token: str, params: dict, range_query: str):
 
     r = requests.get(url, headers=headers, params=params, timeout=20)
 
-    # 1) Si erreur HTTP, on sort avec un message lisible
-    if r.status_code >= 400:
-        snippet = (r.text or "")[:600]
-        raise RuntimeError(
-            f"FranceTravail API error {r.status_code}\n"
-            f"URL: {r.url}\n"
-            f"Headers Content-Type: {r.headers.get('Content-Type')}\n"
-            f"Body (first 600 chars): {snippet}"
-        )
-
-    # 2) Si le content-type n'est pas du JSON, pareil
+    status = r.status_code
     ctype = (r.headers.get("Content-Type") or "").lower()
-    if "json" not in ctype:
-        snippet = (r.text or "")[:600]
+    snippet = (r.text or "")[:600]
+
+    # 1) Aucun contenu = aucune offre trouvée
+    if status == 204:
+        return {"resultats": []}, r.headers.get("Content-Range")
+
+    # 2) Erreur HTTP réelle
+    if status >= 400:
         raise RuntimeError(
-            f"FranceTravail API returned non-JSON content\n"
+            f"FranceTravail API error {status}\n"
             f"URL: {r.url}\n"
             f"Content-Type: {r.headers.get('Content-Type')}\n"
             f"Body (first 600 chars): {snippet}"
         )
 
-    # 3) JSON OK
-    return r.json(), r.headers.get("Content-Range")
+    # 3) Réponse vide inattendue
+    if not (r.text or "").strip():
+        raise RuntimeError(
+            f"FranceTravail API returned empty response\n"
+            f"URL: {r.url}\n"
+            f"Status: {status}\n"
+            f"Content-Type: {r.headers.get('Content-Type')}"
+        )
+
+    # 4) Tentative de parsing JSON
+    try:
+        data = r.json()
+    except Exception as e:
+        raise RuntimeError(
+            f"FranceTravail API returned invalid JSON\n"
+            f"URL: {r.url}\n"
+            f"Status: {status}\n"
+            f"Content-Type: {r.headers.get('Content-Type')}\n"
+            f"Body (first 600 chars): {snippet}"
+        ) from e
+
+    return data, r.headers.get("Content-Range")
 def normalize_offer(raw: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalise une offre France Travail v2 vers le format Hephaistos.
