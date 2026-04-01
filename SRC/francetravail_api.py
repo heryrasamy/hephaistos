@@ -1,132 +1,124 @@
-from __future__ import annotations
-
-import os
-from typing import Any, Dict, Optional, Tuple
-
 import requests
+import time
+
+
+# =========================================================
+# CONFIG — À PERSONNALISER AVEC TES IDENTIFIANTS
+# =========================================================
+CLIENT_ID = "PAR_hephaistos_f07261c0287f59a7738be08a57c97fda5d464d9b3bc27bedc606e5e688039d2a"
+CLIENT_SECRET = "6ea9f5fb153c5260df07adfb943bbe42adc67a131ae2ef38671d21092c06a75e"
 
 TOKEN_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
-BASE_URL = "https://api.francetravail.io/partenaire/offresdemploi"
-SEARCH_URL = f"{BASE_URL}/v2/offres/search"
+OFFERS_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
+COMMUNES_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/referentiel/communes"
+SCOPE = "o2dsoffre api_offresdemploiv2"
 
 
-def get_env(name: str) -> str:
-    v = os.getenv(name, "").strip()
-    if not v:
-        raise RuntimeError(f"Variable manquante: {name}")
-    return v
+
+# =========================================================
+# GESTION DU TOKEN (avec cache)
+# =========================================================
+_token_cache = {
+    "access_token": None,
+    "expires_at": 0
+}
 
 
 def get_access_token() -> str:
-    client_id = get_env("FT_CLIENT_ID")
-    client_secret = get_env("FT_CLIENT_SECRET")
-    scope = get_env("FT_SCOPE")  # ex: "o2dsoffre api_offresdemploiv2"
+    """
+    Récupère un token OAuth2 France Travail.
+    Utilise un cache pour éviter les appels inutiles.
+    """
+    now = time.time()
 
+    # Token encore valide ?
+    if _token_cache["access_token"] and now < _token_cache["expires_at"]:
+        return _token_cache["access_token"]
+
+    # Sinon, on demande un nouveau token
     data = {
         "grant_type": "client_credentials",
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "scope": scope,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "scope": "api_offresdemploiv2 o2dsoffre"
     }
 
-    r = requests.post(
-        TOKEN_URL,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data=data,
-        timeout=30,
-    )
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    if r.status_code != 200:
-        raise RuntimeError(f"Token error {r.status_code}: {r.text}")
+    resp = requests.post(TOKEN_URL, data=data, headers=headers)
 
-    return r.json()["access_token"]
+    if resp.status_code != 200:
+        raise Exception(f"Erreur token : {resp.text}")
+
+    token_data = resp.json()
+    access_token = token_data.get("access_token")
+    expires_in = token_data.get("expires_in", 3600)
+
+    _token_cache["access_token"] = access_token
+    _token_cache["expires_at"] = now + expires_in - 30  # marge de sécurité
+
+    return access_token
 
 
-def search_offers(token: str, params: dict, range_query: str):
-    url = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
-
+# =========================================================
+# RECHERCHE D’OFFRES
+# =========================================================
+def search_offers(token: str, params: dict, range_query: str = "0-49"):
+    """
+    Appelle l’API France Travail pour récupérer des offres.
+    Retourne (json, content-range)
+    """
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
-        "Range": f"items={range_query}",
+        "Range": f"items={range_query}"
     }
 
-    r = requests.get(url, headers=headers, params=params, timeout=20)
+    resp = requests.get(OFFERS_URL, headers=headers, params=params)
 
-    status = r.status_code
-    ctype = (r.headers.get("Content-Type") or "").lower()
-    snippet = (r.text or "")[:600]
+    if resp.status_code not in (200, 206):
+        raise Exception(f"Erreur API offres : {resp.status_code} — {resp.text}")
 
-    # 1) Aucun contenu = aucune offre trouvée
-    if status == 204:
-        return {"resultats": []}, r.headers.get("Content-Range")
+    content_range = resp.headers.get("Content-Range", "")
+    return resp.json(), content_range
 
-    # 2) Erreur HTTP réelle
-    if status >= 400:
-        raise RuntimeError(
-            f"FranceTravail API error {status}\n"
-            f"URL: {r.url}\n"
-            f"Content-Type: {r.headers.get('Content-Type')}\n"
-            f"Body (first 600 chars): {snippet}"
-        )
 
-    # 3) Réponse vide inattendue
-    if not (r.text or "").strip():
-        raise RuntimeError(
-            f"FranceTravail API returned empty response\n"
-            f"URL: {r.url}\n"
-            f"Status: {status}\n"
-            f"Content-Type: {r.headers.get('Content-Type')}"
-        )
-
-    # 4) Tentative de parsing JSON
-    try:
-        data = r.json()
-    except Exception as e:
-        raise RuntimeError(
-            f"FranceTravail API returned invalid JSON\n"
-            f"URL: {r.url}\n"
-            f"Status: {status}\n"
-            f"Content-Type: {r.headers.get('Content-Type')}\n"
-            f"Body (first 600 chars): {snippet}"
-        ) from e
-
-    return data, r.headers.get("Content-Range")
-def normalize_offer(raw: Dict[str, Any]) -> Dict[str, Any]:
+# =========================================================
+# RECHERCHE DE COMMUNES
+# =========================================================
+def search_communes(token: str):
     """
-    Normalise une offre France Travail v2 vers le format Hephaistos.
+    Récupère la liste complète des communes France Travail.
     """
-    entreprise = raw.get("entreprise") or {}
-    lieu = raw.get("lieuTravail") or {}
-    origine = raw.get("origineOffre") or {}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    resp = requests.get(COMMUNES_URL, headers=headers)
+
+    if resp.status_code != 200:
+        raise Exception(f"Erreur API communes : {resp.text}")
+
+    return resp.json()
+
+
+# =========================================================
+# NORMALISATION DES OFFRES
+# =========================================================
+def normalize_offer(o: dict) -> dict:
+    """
+    Nettoie et simplifie une offre France Travail.
+    """
+    if not isinstance(o, dict):
+        return {}
 
     return {
-        "id": raw.get("id", ""),
-        "title": raw.get("intitule", ""),
-        "company": entreprise.get("nom", "") if isinstance(entreprise, dict) else str(entreprise),
-        "location": lieu.get("libelle", "") if isinstance(lieu, dict) else str(lieu),
-        "contract": raw.get("typeContratLibelle", raw.get("typeContrat", "")),
-        "published_at": raw.get("dateCreation", raw.get("dateActualisation", "")),
-        "url": origine.get("urlOrigine", "") if isinstance(origine, dict) else "",
-        "text": raw.get("description", "") or "",
+        "id": o.get("id"),
+        "title": o.get("intitule", "").strip(),
+        "company": (o.get("entreprise") or {}).get("nom", "").strip(),
+        "location": (o.get("lieuTravail") or {}).get("libelle", "").strip(),
+        "text": o.get("description", "").strip(),
+        "url": o.get("origineOffre", {}).get("urlOrigine", ""),
+        "raw": o
     }
-REFERENTIEL_COMMUNES_URL = f"{BASE_URL}/v2/referentiel/communes"
-
-
-def search_communes(token: str) -> list[dict]:
-    """
-    Récupère le référentiel des communes.
-    Le référentiel renvoie une liste d'objets avec:
-    - code (code INSEE)
-    - libelle (nom commune)
-    - codePostal
-    - codeDepartement
-    """
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
-
-    r = requests.get(REFERENTIEL_COMMUNES_URL, headers=headers, timeout=30)
-    r.raise_for_status()
-    return r.json()

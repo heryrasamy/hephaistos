@@ -1,40 +1,105 @@
 import re
 import unicodedata
 from collections import Counter
+from typing import List
 import streamlit as st
 from cv_extract import extract_text_from_upload
-from matching_simple import score_cv_offer, extract_terms, get_top_cv_families
-from offers_phase1 import fetch_offers_francetravail, add_location_params, fetch_offers_multi_queries
-from francetravail_api import get_access_token, search_communes
+from matching_simple import score_cv_offer, STOPWORDS
+from job_inference import (
+    build_job_inference_summary,
+    build_search_queries_from_job_summary,
+    get_top_cv_families,
+)
+from offers_phase1 import fetch_offers_multi_queries
 from location_helper import filter_communes, format_commune_label
-
-
-
+from francetravail_api import search_communes, get_access_token
 
 
 st.set_page_config(page_title="Hephaistos", layout="wide")
-
 st.title("Hephaistos")
 st.write("Agent IA emploi – prototype")
 
-# ------------------------
-# Session state
-# ------------------------
+
+# =========================================================
+# SESSION STATE
+# =========================================================
 if "offer_text" not in st.session_state:
     st.session_state["offer_text"] = ""
+
 if "offers_scored" not in st.session_state:
-    st.session_state["offers_scored"] = []  # cache du dernier Top calculé
+    st.session_state["offers_scored"] = []
+
 if "generated_queries" not in st.session_state:
     st.session_state["generated_queries"] = []
 
-generated_queries = st.session_state.get("generated_queries", [])
+if "keywords_input" not in st.session_state:
+    st.session_state["keywords_input"] = ""
+
+if "last_analysis" not in st.session_state:
+    st.session_state["last_analysis"] = None
 
 
-# ------------------------
-# Utils
-# ------------------------
+# =========================================================
+# CONSTANTES
+# =========================================================
+VALID_PUBLIEE_DEPUIS = [1, 3, 7, 14, 30, 60, 90, 180, 365]
+
+FAMILY_LABELS = {
+    "production": "Production & Fabrication",
+    "maintenance": "Maintenance & Réparation",
+    "logistique": "Logistique & Transport",
+    "batiment": "Construction & Bâtiment",
+    "technique_installation": "Technique & Installation",
+    "administratif_gestion": "Administratif & Gestion",
+    "analyse_pilotage": "Analyse & Pilotage",
+    "vente_commerce": "Vente & Commerce",
+    "relation_client_accueil": "Relation Client & Accueil",
+    "communication_marketing": "Communication & Marketing",
+    "pedagogie_formation": "Pédagogie & Formation",
+    "sante_soin": "Santé & Soin",
+    "social_accompagnement": "Social & Accompagnement",
+    "securite_protection": "Sécurité & Protection",
+    "creation_artistique": "Création & Artistique",
+    "hotellerie_restauration": "Hôtellerie & Restauration",
+}
+
+GENERIC_TOPIC_TERMS = {
+    "professionnel",
+    "professionnelle",
+    "communication",
+    "organisation",
+    "gestion",
+    "suivi",
+    "accompagnement",
+    "service",
+    "services",
+    "mission",
+    "missions",
+    "projet",
+    "projets",
+    "experience",
+    "experiences",
+    "activite",
+    "activites",
+    "competence",
+    "competences",
+    "poste",
+    "profil",
+    "travail",
+    "structure",
+    "entreprise",
+    "societe",
+    "domaine",
+    "public",
+    "annee",
+}
+
+
+
+# =========================================================
+# UTILS
+# =========================================================
 def to_text(x) -> str:
-    """Convertit x en texte utilisable par le scoring (évite tuple/list/None)."""
     if x is None:
         return ""
     if isinstance(x, str):
@@ -42,34 +107,49 @@ def to_text(x) -> str:
     if isinstance(x, (list, tuple)):
         return " ".join(str(i) for i in x if i is not None)
     return str(x)
+
+
+def format_family_labels(families: List[str]) -> List[str]:
+    if not families:
+        return []
+    return [FAMILY_LABELS.get(f, f) for f in families]
+
+
 def _strip_accents_local(s: str) -> str:
     return "".join(
-        c for c in unicodedata.normalize("NFKD", s)
+        c for c in unicodedata.normalize("NFKD", s or "")
         if not unicodedata.combining(c)
     )
 
 
 def _normalize_local(text: str) -> str:
-    """
-    Normalise le texte pour la détection de thèmes.
-    """
     text = (text or "").lower()
     text = _strip_accents_local(text)
-
     text = re.sub(r"[/|\\,_;:()\[\]{}]+", " ", text)
     text = re.sub(r"[-'’]+", " ", text)
     text = re.sub(r"[^a-z0-9\s]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
-    
-def detect_cv_topics(cv_text, top_n=8):
-    """
-    Détecte des thèmes dominants plus utiles à partir du CV.
-    Approche généraliste, sans dépendance NLP externe.
-    Donne la priorité aux expressions métier fréquentes,
-    même si elles n'apparaissent qu'une seule fois.
-    """
+
+
+def is_generic_topic_term(term: str) -> bool:
+    term_norm = _normalize_local(term)
+
+    if not term_norm:
+        return True
+
+    words = term_norm.split()
+
+    if term_norm in GENERIC_TOPIC_TERMS:
+        return True
+
+    if words and all(word in GENERIC_TOPIC_TERMS for word in words):
+        return True
+
+    return False
+
+
+def detect_cv_topics(cv_text: str, top_n: int = 8) -> List[str]:
     if not cv_text:
         return []
 
@@ -121,7 +201,6 @@ def detect_cv_topics(cv_text, top_n=8):
         "competence", "competences", "formation"
     }
 
-    # Expressions métier génériques, réutilisables sur plusieurs profils
     preferred_phrases = [
         "agent d accueil",
         "charge d accueil",
@@ -153,16 +232,13 @@ def detect_cv_topics(cv_text, top_n=8):
         "site internet",
     ]
 
-    # Normalisation des expressions pour comparaison
     normalized_phrases = [_normalize_local(p) for p in preferred_phrases]
 
-    # 1) Détection prioritaire d'expressions métier présentes dans le texte
     found_phrases = []
     for phrase in normalized_phrases:
         if phrase in text:
             found_phrases.append(phrase)
 
-    # 2) Nettoyage des tokens simples
     tokens = [
         tok for tok in text.split()
         if len(tok) >= 4
@@ -180,12 +256,10 @@ def detect_cv_topics(cv_text, top_n=8):
 
     word_counts = Counter(tokens)
 
-    # 3) Mots simples utiles, même avec fréquence 1
     useful_single_words = []
     for word, count in word_counts.items():
         score = count
 
-        # petit bonus pour certains mots métier fréquents
         if word in {
             "accueil", "administratif", "administrative", "bureautique",
             "archivage", "secretariat", "documents", "planning",
@@ -198,7 +272,6 @@ def detect_cv_topics(cv_text, top_n=8):
 
     useful_single_words.sort(key=lambda x: (-x[1], x[0]))
 
-    # 4) Fusion finale en évitant les doublons redondants
     topics = []
     covered_words = set()
 
@@ -219,11 +292,8 @@ def detect_cv_topics(cv_text, top_n=8):
 
     return topics[:top_n]
 
-def topics_to_skills(topics):
-    """
-    Transforme des thèmes détectés en compétences dominantes
-    de manière généraliste, sans dépendre d'un CV particulier.
-    """
+
+def topics_to_skills(topics: List[str]) -> List[str]:
     if not topics:
         return []
 
@@ -272,36 +342,25 @@ def topics_to_skills(topics):
     for topic in topics:
         t = (topic or "").lower().strip()
 
-        skill = None
-
         if t in software_terms:
             skill = f"Utilisation de {topic}"
-
         elif t in language_terms:
             skill = f"Maîtrise de {topic}"
-
         elif any(term in t for term in management_terms):
             skill = f"{topic.capitalize()} d'activités ou de projets"
-
         elif any(term in t for term in analysis_terms):
             skill = f"{topic.capitalize()}"
-
         elif any(term in t for term in communication_terms):
             skill = f"{topic.capitalize()}"
-
         elif any(term in t for term in client_terms):
             skill = f"{topic.capitalize()}"
-
         elif any(term in t for term in production_terms):
             skill = f"Production / gestion de {topic}"
-
         else:
-            # fallback généraliste
             skill = topic.capitalize()
 
         skills.append(skill)
 
-    # Supprimer les doublons en gardant l'ordre
     unique_skills = []
     seen = set()
 
@@ -311,38 +370,15 @@ def topics_to_skills(topics):
             seen.add(key)
             unique_skills.append(s)
 
-    return unique_skills[:8]  
+    return unique_skills[:8]
 
-def to_score(x) -> int:
-    """Force un score entier (0..100). Si x est bizarre (MatchResult, tuple, etc.), retourne 0."""
-    if x is None:
-        return 0
-    if isinstance(x, bool):
-        return int(x)
-    if isinstance(x, (int, float)):
-        return int(x)
-    if isinstance(x, (list, tuple)) and x:
-        return to_score(x[0])
-    # MatchResult ou autre objet: tentative de conversion
-    try:
-        return int(float(x))
-    except Exception:
-        return 0
-# ================================
-# 1) IMPORT CV
-# ================================
+
 def classify_term(term: str) -> str:
-    """
-    Classe un terme manquant dans une catégorie assez générique
-    pour produire une suggestion CV réutilisable sur des profils variés.
-    """
     t = (term or "").lower().strip()
 
-    # Sécurité minimale
     if not t:
         return "generic"
 
-    # 1) Langues
     language_markers = {
         "anglais", "espagnol", "allemand", "italien", "portugais",
         "arabe", "chinois", "japonais", "russe", "bilingue",
@@ -351,7 +387,6 @@ def classify_term(term: str) -> str:
     if any(k in t for k in language_markers):
         return "language"
 
-    # 2) Diplômes / formations / certifications
     diploma_markers = {
         "bac", "bachelor", "master", "licence", "bts", "dut", "but",
         "formation", "certification", "certifie", "certifiée",
@@ -360,7 +395,6 @@ def classify_term(term: str) -> str:
     if any(k in t for k in diploma_markers):
         return "diploma"
 
-    # 3) Soft skills / savoir-être
     soft_skill_markers = {
         "autonomie", "rigueur", "organisation", "adaptabilite",
         "adaptation", "relationnel", "communication", "ecoute",
@@ -371,7 +405,6 @@ def classify_term(term: str) -> str:
     if any(k in t for k in soft_skill_markers):
         return "soft_skill"
 
-    # 4) Management / coordination / pilotage
     management_markers = {
         "gestion", "coordination", "pilotage", "organisation",
         "suivi", "planification", "planning", "encadrement",
@@ -381,7 +414,6 @@ def classify_term(term: str) -> str:
     if any(k in t for k in management_markers):
         return "management"
 
-    # 5) Relation client / commerce / service
     client_markers = {
         "client", "clients", "vente", "ventes", "accueil",
         "service", "support", "conseil", "commercial",
@@ -391,7 +423,6 @@ def classify_term(term: str) -> str:
     if any(k in t for k in client_markers):
         return "client"
 
-    # 6) Analyse / données / indicateurs
     analysis_markers = {
         "analyse", "donnees", "données", "data", "reporting",
         "tableau de bord", "indicateur", "indicateurs",
@@ -400,8 +431,6 @@ def classify_term(term: str) -> str:
     if any(k in t for k in analysis_markers):
         return "analysis"
 
-    # 7) Outils / logiciels / technologies
-    # Ici on devient plus souple : on combine une petite base + motifs génériques
     software_markers = {
         "logiciel", "logiciels", "outil", "outils", "application",
         "applications", "plateforme", "plateformes", "erp", "crm",
@@ -419,7 +448,6 @@ def classify_term(term: str) -> str:
         "solidworks", "power bi", "tableau", "qlik"
     }
 
-    # motifs typiques de techno / logiciel / sigle
     has_tech_shape = (
         "/" in t
         or "+" in t
@@ -436,97 +464,8 @@ def classify_term(term: str) -> str:
 
     return "generic"
 
-def build_search_queries_from_topics(topics, max_queries=5):
-    """
-    Génère des requêtes emploi à partir des thèmes détectés dans le CV.
 
-    Stratégie :
-    1. identifier des familles métiers probables
-    2. produire d'abord des requêtes ciblées
-    3. compléter avec quelques requêtes élargies
-    """
-    if not topics:
-        return []
-
-    cleaned = [t.strip().lower() for t in topics if t and t.strip()]
-    cleaned = list(dict.fromkeys(cleaned))  # dédoublonnage
-
-    TOPIC_TO_ROLES = {
-        "musee": ["médiation culturelle", "chargé de projet culturel"],
-        "musée": ["médiation culturelle", "chargé de projet culturel"],
-        "musees": ["médiation culturelle", "chargé de projet culturel"],
-        "musées": ["médiation culturelle", "chargé de projet culturel"],
-        "patrimoine": ["médiation culturelle", "chargé de projet culturel"],
-        "culture": ["médiation culturelle", "chargé de projet culturel"],
-
-        "numerique": ["communication numérique", "web"],
-        "numérique": ["communication numérique", "web"],
-        "digital": ["communication numérique", "chargé de communication digitale"],
-        "web": ["web", "chargé de communication digitale"],
-        "site internet": ["web", "chargé de communication digitale"],
-        "developpement": ["web", "chargé de communication digitale"],
-        "développement": ["web", "chargé de communication digitale"],
-
-        "reseaux sociaux": ["community manager", "chargé de communication"],
-        "réseaux sociaux": ["community manager", "chargé de communication"],
-        "communication": ["chargé de communication", "communication numérique"],
-        "contenu": ["création de contenu", "chargé de communication"],
-        "redaction": ["rédacteur web", "création de contenu"],
-        "rédaction": ["rédacteur web", "création de contenu"],
-
-        "animation": ["animation culturelle", "création de contenu"],
-        "animation chaine": ["création de contenu", "community manager"],
-        "animation chaîne": ["création de contenu", "community manager"],
-
-        "gestion": ["assistant de gestion", "chargé de projet"],
-        "coordination": ["chargé de projet", "assistant de coordination"],
-        "organisation": ["assistant administratif", "chargé de projet"],
-
-        "accueil": ["agent d'accueil", "chargé d'accueil"],
-        "vente": ["conseiller de vente", "commercial"],
-        "administratif": ["assistant administratif", "agent administratif"],
-        "administration": ["assistant administratif", "agent administratif"],
-        "logistique": ["agent logistique", "assistant logistique"],
-        "support": ["support client", "conseiller client"],
-        "service client": ["conseiller client", "support client"],
-    }
-
-    targeted_queries = []
-    expanded_queries = []
-
-    for topic in cleaned:
-        roles = TOPIC_TO_ROLES.get(topic, [])
-        for i, role in enumerate(roles):
-            if i == 0:
-                targeted_queries.append(role)
-            else:
-                expanded_queries.append(role)
-
-    # secours minimal si aucun mapping exact
-    if not targeted_queries:
-        targeted_queries = cleaned[:2]
-        expanded_queries = cleaned[2:4]
-
-    targeted_queries = list(dict.fromkeys(targeted_queries))
-    expanded_queries = list(dict.fromkeys(expanded_queries))
-
-    final_queries = []
-
-    # 1) on privilégie d'abord les requêtes ciblées
-    for q in targeted_queries[:3]:
-        final_queries.append(q)
-
-    # 2) puis quelques requêtes élargies
-    for q in expanded_queries[:2]:
-        if q not in final_queries:
-            final_queries.append(q)
-
-    return final_queries[:max_queries]
 def suggest_for_term(term: str, category: str) -> str:
-    """
-    Génère une suggestion honnête à partir d'un terme manquant
-    et de sa catégorie.
-    """
     if category == "software":
         return (
             f"Si vous maîtrisez réellement « {term} », citez-le explicitement "
@@ -569,19 +508,14 @@ def suggest_for_term(term: str, category: str) -> str:
     )
 
 
-def build_cv_suggestions(matched, missing, max_suggestions: int = 6):
-    """
-    Construit une liste de suggestions génériques pour améliorer le CV
-    sans inventer d'expérience ni de compétence.
-    """
+def build_cv_suggestions(missing_terms: List[str], max_suggestions: int = 6) -> List[str]:
     suggestions = []
 
-    for term in missing[:12]:
+    for term in missing_terms[:12]:
         category = classify_term(term)
         suggestion = suggest_for_term(term, category)
         suggestions.append(suggestion)
 
-    # Supprime les doublons tout en gardant l'ordre
     unique = []
     seen = set()
 
@@ -591,6 +525,48 @@ def build_cv_suggestions(matched, missing, max_suggestions: int = 6):
             unique.append(s)
 
     return unique[:max_suggestions]
+
+
+def is_clean_term(term: str) -> bool:
+    words = term.split()
+
+    if len(words) > 4:
+        return False
+
+    if any(w in STOPWORDS for w in words):
+        return False
+
+    generic_words = {
+        "agent", "profil", "poste", "travail", "mission", "metier",
+        "qualites", "qualite", "organisation", "adaptation", "agenda",
+        "experience", "competence", "formation", "service"
+    }
+    if any(w in generic_words for w in words):
+        return False
+
+    if any(len(w) < 3 for w in words):
+        return False
+
+    return True
+
+
+def dedupe_keep_order(values: List[str]) -> List[str]:
+    result = []
+    seen = set()
+
+    for value in values:
+        cleaned = " ".join(str(value).strip().split())
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            seen.add(key)
+            result.append(cleaned)
+
+    return result
+
+
+# =========================================================
+# 1) IMPORTER LE CV
+# =========================================================
 st.subheader("1) Importer votre CV")
 
 uploaded = st.file_uploader(
@@ -599,6 +575,15 @@ uploaded = st.file_uploader(
 )
 
 cv_text = ""
+topics: List[str] = []
+skills: List[str] = []
+cv_families: List[str] = []
+job_summary = {}
+search_queries: List[str] = []
+cv_terms_for_inference: List[str] = []
+main_job_label = "inconnu"
+domain_label = "inconnu"
+related_jobs = []
 
 if uploaded:
     file_bytes = uploaded.read()
@@ -606,47 +591,127 @@ if uploaded:
 
     st.success(f"CV importé — {len(cv_text)} caractères")
 
-cv_families = get_top_cv_families(cv_text)
+    cv_terms_for_inference = cv_text.split()
 
-st.markdown("### Familles métier dominantes détectées")
-st.write(cv_families)
+    topics_raw = detect_cv_topics(cv_text)
+    topics = [t for t in topics_raw if not is_generic_topic_term(t)]
+
+    if len(topics) < 3:
+        topics = topics_raw[:5]
+
+    if len(topics) < 3:
+        for t in topics_raw:
+            if t not in topics:
+                topics.append(t)
+            if len(topics) >= 5:
+                break
+
+    topics = dedupe_keep_order(topics)
+
+    cv_families = get_top_cv_families(cv_text)
+    skills = topics_to_skills(topics)
+
+    job_summary = build_job_inference_summary(
+        detected_families=cv_families,
+        cv_terms=cv_terms_for_inference,
+        top_n=3
+    )
+
+    main_job_data = job_summary.get("main_job", {})
+    related_jobs = job_summary.get("related_jobs", [])
+
+    if isinstance(main_job_data, dict):
+        main_job_label = main_job_data.get("job", "inconnu")
+        domain_label = main_job_data.get("domain", "inconnu")
+    else:
+        main_job_label = main_job_data or "inconnu"
+        domain_label = job_summary.get("domain", "inconnu")
+
+    keyword_candidates = []
+
+    if main_job_label and main_job_label != "inconnu":
+        keyword_candidates.append(main_job_label)
+
+    if domain_label and domain_label != "inconnu" and domain_label != main_job_label:
+        keyword_candidates.append(domain_label)
+
+    if related_jobs:
+        first_related = related_jobs[0]
+        if isinstance(first_related, dict):
+            first_related_label = first_related.get("job", "")
+        else:
+            first_related_label = str(first_related)
+
+        if first_related_label and first_related_label not in keyword_candidates:
+            keyword_candidates.append(first_related_label)
+
+    if not keyword_candidates:
+        keyword_candidates = topics[:2]
+
+    new_keywords_value = ", ".join(keyword_candidates[:3])
+    st.session_state["suggested_keywords"] = new_keywords_value
+    st.session_state["keywords_input"] = new_keywords_value
+
+    search_queries = build_search_queries_from_job_summary(
+        job_summary=job_summary,
+        topics=topics,
+        max_queries=5
+    )
+
+    st.session_state["generated_queries"] = search_queries
+
 with st.expander("Voir le texte extrait"):
-        st.write(cv_text)
-
-        topics = detect_cv_topics(cv_text)
-        skills = topics_to_skills(topics)
-
-        st.session_state["suggested_keywords"] = " ".join(topics[:2])
-        st.session_state["keywords_input"] = st.session_state["suggested_keywords"]
-
-        search_queries = build_search_queries_from_topics(topics)
-st.session_state["generated_queries"] = search_queries
+    st.write(cv_text)
 
 st.markdown("### Thèmes dominants détectés dans votre CV")
 if topics:
-        cols = st.columns(4)
-        for i, t in enumerate(topics):
-            cols[i % 4].info(t)
-        else:
-            for fam in cv_families:
-                st.success(fam)
+    cols = st.columns(4)
+    for i, t in enumerate(topics[:8]):
+        cols[i % 4].info(t)
+else:
+    st.write("Aucun thème dominant détecté.")
 
-        cv_families = get_top_cv_families(cv_text)
+if cv_families:
+    st.markdown("### Familles métier dominantes détectées")
+    for fam_label in format_family_labels(cv_families):
+        st.success(fam_label)
 
-st.markdown("### Familles métier dominantes détectées")
-st.write(cv_families)
+if skills:
+    st.markdown("### Compétences dominantes estimées")
+    for skill in skills:
+        st.write(f"• {skill}")
 
-# ================================
-# 2) PHASE 1 — RECHERCHE OFFRES
-# ================================
+if uploaded:
+    st.markdown("### Analyse métier du CV")
+    st.write(f"Métier principal estimé : {main_job_label}")
+    st.write(f"Domaine : {domain_label}")
+
+    secondary_family = cv_families[1] if len(cv_families) > 1 else None
+    if secondary_family:
+        st.write(
+            "Profil secondaire détecté : "
+            f"{FAMILY_LABELS.get(secondary_family, secondary_family.replace('_', ' ').title())}"
+        )
+
+    if related_jobs:
+        st.write("Métiers proches :")
+        for job in related_jobs:
+            if isinstance(job, dict):
+                st.write(f"• {job.get('job', 'inconnu')}")
+            else:
+                st.write(f"• {job}")
+
+
+# =========================================================
+# 2) PHASE 1 — TROUVER DES OFFRES
+# =========================================================
 st.subheader("2) Phase 1 — Trouver des offres (France Travail)")
-
-st.write("Localisation")
-
+st.markdown("### Localisation")
 
 location_query = st.text_input(
     "Code postal, début de code postal, département ou ville",
-    value="75",
+    value="",
+    placeholder="Ex : Paris, 75011, Toulouse...",
     help="Exemples : 75, 75011, Paris, Toulouse"
 )
 
@@ -654,11 +719,6 @@ rayon_km = st.slider("Rayon autour du lieu (km)", 0, 100, 10)
 
 selected_commune = None
 generated_queries = st.session_state.get("generated_queries", [])
-
-if generated_queries:
-    st.markdown("### Requêtes suggérées à partir du CV")
-    for q in generated_queries:
-        st.write("•", q)
 
 if location_query.strip():
     try:
@@ -687,22 +747,27 @@ if location_query.strip():
     except Exception as e:
         st.error(f"Erreur référentiel communes : {e}")
 
+if generated_queries:
+    st.markdown("### Requêtes suggérées à partir du CV")
+    for q in generated_queries:
+        st.write(f"• {q}")
+
 keywords = st.text_input(
     "Mots-clés (séparés par virgules)",
     key="keywords_input"
 )
 
-days = st.slider("Publié depuis (jours)", 1, 30, 7)
+days = st.select_slider(
+    "Publié depuis",
+    VALID_PUBLIEE_DEPUIS,
+    value=7
+)
 
 max_results = st.selectbox(
     "Nombre d'offres à récupérer (max 150)",
     [50, 100, 150],
     index=0,
 )
-
-# Bouton principal
-st.write("Requêtes actuellement utilisées :", st.session_state.get("generated_queries", []))
-st.write("Champ mots-clés actuel :", keywords)
 
 if st.button("Rechercher et classer"):
     try:
@@ -717,63 +782,143 @@ if st.button("Rechercher et classer"):
         queries = []
 
         if keywords.strip():
-            queries.append(keywords.strip())
+            manual_keywords = [k.strip() for k in keywords.split(",") if k.strip()]
+            queries.extend(manual_keywords)
 
         for q in st.session_state.get("generated_queries", []):
             if q not in queries:
                 queries.append(q)
 
-        offers_raw = fetch_offers_multi_queries(
-            queries=queries,
-            base_params=base_params,
-            max_results_per_query=max_results
-        )
+        queries = dedupe_keep_order(queries)
 
-        st.write(f"Offres récupérées : {len(offers_raw)}")
-
-        scored = []
-
-        for o in offers_raw:
-            description = to_text(o.get("text", ""))
-
-            # ignorer les annonces trop pauvres
-            if len(description.strip()) < 50:
-                continue
-
-            result = score_cv_offer(
-                to_text(cv_text),
-                description
+        if not queries:
+            st.warning("Aucune requête de recherche disponible.")
+        else:
+            offers_raw = fetch_offers_multi_queries(
+                queries=queries,
+                base_params=base_params,
+                max_results_per_query=max_results
             )
 
-            # enrichir l'offre avec le score
-            o["score"] = result["score"]
-            o["matched_terms"] = result["matched_terms"]
-            o["missing_terms"] = result["missing_terms"]
+            st.write(f"Offres récupérées : {len(offers_raw)}")
 
-            scored.append(o)
+            scored = []
 
-        # tri des offres par score
-        scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+            for o in offers_raw:
+                description = to_text(o.get("text", ""))
 
-        # garder seulement le top 30
-        scored = scored[:30]
+                if len(description.strip()) < 50:
+                    continue
 
-        # stocker pour l'interface
-        st.session_state["offers_scored"] = scored
+                result = score_cv_offer(
+                    to_text(cv_text),
+                    description
+                )
+
+                offer_families = get_top_cv_families(description)
+                o["offer_families"] = offer_families
+
+                cv_main_family = cv_families[0] if cv_families else None
+                offer_main_family = offer_families[0] if offer_families else None
+
+                adjusted_score = result["score"]
+
+                title_text = to_text(o.get("title", "")).lower()
+                description_lower = description.lower()
+
+                # 1) Cohérence des familles
+                if cv_main_family and offer_main_family and cv_main_family == offer_main_family:
+                    adjusted_score += 12
+                elif offer_main_family and offer_main_family in cv_families[:2]:
+                    adjusted_score += 6
+                elif cv_main_family and offer_main_family and offer_main_family not in cv_families:
+                    adjusted_score -= 10
+
+                family_overlap = len(set(cv_families[:3]) & set(offer_families[:3]))
+                adjusted_score += family_overlap * 4
+
+                # 2) Bonus métier principal
+                main_job_label_lower = main_job_label.lower()
+
+                if main_job_label_lower and main_job_label_lower in title_text:
+                    adjusted_score += 18
+                elif main_job_label_lower and main_job_label_lower in description_lower:
+                    adjusted_score += 12
+
+                # 3) Bonus métiers proches
+                for job in related_jobs:
+                    if isinstance(job, dict):
+                        related_label = job.get("job", "").lower()
+                    else:
+                        related_label = str(job).lower()
+
+                    if not related_label:
+                        continue
+
+                    if related_label in title_text:
+                        adjusted_score += 10
+                    elif related_label in description_lower:
+                        adjusted_score += 6
+
+                # 4) Bonus mots-clés suggérés
+                keyword_values = [
+                    k.strip().lower()
+                    for k in st.session_state.get("keywords_input", "").split(",")
+                    if k.strip()
+                ]
+
+                for kw in keyword_values:
+                    if kw in title_text:
+                        adjusted_score += 6
+                    elif kw in description_lower:
+                        adjusted_score += 3
+
+                # 5) Léger malus si le titre est éloigné
+                title_has_signal = False
+
+                if main_job_label_lower and main_job_label_lower in title_text:
+                    title_has_signal = True
+                else:
+                    for job in related_jobs:
+                        if isinstance(job, dict):
+                            related_label = job.get("job", "").lower()
+                        else:
+                            related_label = str(job).lower()
+
+                        if related_label and related_label in title_text:
+                            title_has_signal = True
+                            break
+
+                if not title_has_signal and offer_main_family and offer_main_family not in cv_families[:2]:
+                    adjusted_score -= 6
+
+                adjusted_score = max(0, min(100, adjusted_score))
+
+                o["score"] = adjusted_score
+                o["base_score"] = result["score"]
+                o["matched_terms"] = result.get("matched_terms", [])
+                o["missing_terms"] = result.get("missing_terms", [])
+
+                scored.append(o)
+
+            scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+            scored = scored[:30]
+
+            st.session_state["offers_scored"] = scored
 
     except Exception as e:
         st.error(f"Erreur lors de la recherche d'offres : {e}")
-# ================================
+
+
+# =========================================================
 # 2b) TOP 30
-# ================================
+# =========================================================
 offers_scored = st.session_state.get("offers_scored", [])
 
 if offers_scored:
-    top = offers_scored[:30]
-
     st.subheader("Top 30 (triées par compatibilité)")
 
-    for i, o in enumerate(top):
+    for i, o in enumerate(offers_scored[:30]):
         title = o.get("title", "Sans titre")
         company = o.get("company", "")
         location = o.get("location", "")
@@ -792,10 +937,11 @@ if offers_scored:
         with st.expander("Voir description", expanded=False):
             st.write(to_text(o.get("text", "Description non disponible")))
 
-st.subheader("3) Coller une offre d'emploi (optionnel)")
 
-if "offer_text" not in st.session_state:
-    st.session_state["offer_text"] = ""
+# =========================================================
+# 3) COLLER UNE OFFRE
+# =========================================================
+st.subheader("3) Coller une offre d'emploi (optionnel)")
 
 st.text_area(
     "Texte de l'offre",
@@ -803,9 +949,10 @@ st.text_area(
     key="offer_text"
 )
 
-# ================================
-# 4) Analyser CV vs Offre
-# ================================
+
+# =========================================================
+# 4) ANALYSER CV vs OFFRE
+# =========================================================
 st.subheader("4) Analyser CV vs Offre")
 
 offer_text = st.session_state.get("offer_text", "")
@@ -820,7 +967,6 @@ if st.button("Analyser CV vs Offre"):
             to_text(cv_text),
             to_text(offer_text)
         )
-
         st.session_state["last_analysis"] = result
 
 analysis = st.session_state.get("last_analysis")
@@ -842,7 +988,11 @@ if analysis:
 
     with col2:
         st.markdown("### Manques (mots absents)")
-        missing_terms = analysis.get("missing_terms", [])
+        missing_terms = [
+            t for t in analysis.get("missing_terms", [])
+            if is_clean_term(t)
+        ]
+
         if missing_terms:
             for term in missing_terms[:12]:
                 st.write(f"- {term}")
@@ -857,10 +1007,12 @@ if analysis:
         st.write("Aucun mot fort détecté.")
 
     st.markdown("### Suggestions pour améliorer le CV")
-    suggestions = analysis.get("missing_terms", [])[:8]
+    suggestions = build_cv_suggestions(
+        missing_terms=analysis.get("missing_terms", [])
+    )
 
     if suggestions:
-        for term in suggestions:
-            st.write(f"- Ajouter ou reformuler une expérience liée à : {term}")
+        for suggestion in suggestions:
+            st.write(f"- {suggestion}")
     else:
         st.write("Aucune suggestion générée.")
