@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
+import streamlit as st
 
-from francetravail_api import get_access_token, search_offers, normalize_offer
+from francetravail_api import (
+    get_access_token,
+    search_offers,
+    normalize_offer
+)
 
 
+# =========================================================
+# 1) PARAMÈTRES DE LOCALISATION
+# =========================================================
 def add_location_params(
     params: Dict[str, Any],
     commune_code: str | None,
@@ -25,9 +33,13 @@ def add_location_params(
     return p
 
 
+# =========================================================
+# 2) RÉCUPÉRATION DES OFFRES (PAGINATION)
+# =========================================================
 def fetch_offers_francetravail(
     params: Dict[str, Any],
-    max_results: int = 100
+    max_results: int = 100,
+    debug: bool = False
 ) -> Tuple[List[Dict[str, Any]], str]:
     """
     Récupère jusqu'à max_results offres via pagination range.
@@ -58,6 +70,7 @@ def fetch_offers_francetravail(
         if len(raw_list) < (end - start + 1):
             break
 
+    # Déduplication
     seen = set()
     uniq = []
 
@@ -68,20 +81,26 @@ def fetch_offers_francetravail(
             o.get("location", "").lower().strip(),
         )
 
-        if key in seen:
-            continue
+        if key not in seen:
+            seen.add(key)
+            uniq.append(o)
 
-        seen.add(key)
-        uniq.append(o)
+    if debug:
+        st.markdown("### Debug — Nombre brut d'offres récupérées")
+        st.write(len(uniq))
 
     return uniq, content_range_last
 
 
+# =========================================================
+# 3) MULTI-REQUÊTES
+# =========================================================
 def fetch_offers_multi_queries(
-    base_params,
-    queries,
-    max_results_per_query=50
-):
+    base_params: Dict[str, Any],
+    queries: List[str],
+    max_results_per_query: int = 50,
+    debug: bool = False
+) -> List[Dict[str, Any]]:
     """
     Lance plusieurs recherches d'offres à partir d'une liste de requêtes,
     fusionne les résultats et supprime les doublons.
@@ -97,9 +116,13 @@ def fetch_offers_multi_queries(
             params = dict(base_params or {})
             params["motsCles"] = query
 
+            if debug:
+                st.write(f"🔍 DEBUG — Requête envoyée : {params}")
+
             offers, _ = fetch_offers_francetravail(
                 params=params,
-                max_results=max_results_per_query
+                max_results=max_results_per_query,
+                debug=debug
             )
 
             for offer in offers:
@@ -114,6 +137,7 @@ def fetch_offers_multi_queries(
                     all_offers.append(offer)
 
         except Exception as e:
-            print(f"Erreur requête '{query}' : {e}")
+            if debug:
+                st.error(f"Erreur requête '{query}' : {e}")
 
     return all_offers

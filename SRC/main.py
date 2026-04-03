@@ -2,7 +2,9 @@ import re
 import unicodedata
 from collections import Counter
 from typing import List
+
 import streamlit as st
+
 from cv_extract import extract_text_from_upload
 from matching_simple import score_cv_offer, STOPWORDS
 from job_inference import (
@@ -37,6 +39,9 @@ if "keywords_input" not in st.session_state:
 
 if "last_analysis" not in st.session_state:
     st.session_state["last_analysis"] = None
+
+if "suggested_keywords" not in st.session_state:
+    st.session_state["suggested_keywords"] = ""
 
 
 # =========================================================
@@ -95,7 +100,6 @@ GENERIC_TOPIC_TERMS = {
 }
 
 
-
 # =========================================================
 # UTILS
 # =========================================================
@@ -130,6 +134,150 @@ def _normalize_local(text: str) -> str:
     text = re.sub(r"[^a-z0-9\s]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def remove_redundant_terms(terms: list[str]) -> list[str]:
+    """
+    Supprime les termes inclus dans des termes plus longs.
+    """
+    terms_sorted = sorted(terms, key=lambda x: len(x), reverse=True)
+    result = []
+
+    for term in terms_sorted:
+        if not any(term in longer for longer in result):
+            result.append(term)
+
+    return result
+
+
+def is_clean_term(term: str) -> bool:
+    words = term.split()
+
+    if len(words) > 4:
+        return False
+
+    if any(w in STOPWORDS for w in words):
+        return False
+
+    generic_words = {
+        "agent", "profil", "poste", "travail", "mission", "metier",
+        "qualites", "qualite", "organisation", "adaptation", "agenda",
+        "experience", "competence", "formation", "service"
+    }
+    if any(w in generic_words for w in words):
+        return False
+
+    if any(len(w) < 3 for w in words):
+        return False
+
+    return True
+
+
+def prepare_display_terms(terms: list[str], max_items: int = 8) -> list[str]:
+    """
+    Prépare une liste de termes pour affichage utilisateur.
+    """
+    cleaned = [t for t in terms if is_clean_term(t)]
+    reduced = remove_redundant_terms(cleaned)
+    return reduced[:max_items]
+
+
+def interpret_score(score: int) -> str:
+    """
+    Donne une interprétation simple du score.
+    """
+    if score < 40:
+        return "Correspondance faible"
+    elif score < 60:
+        return "Correspondance partielle"
+    elif score < 80:
+        return "Bonne correspondance"
+    else:
+        return "Très bonne correspondance"
+
+
+def build_cv_suggestions_from_competencies(missing_competencies: list[dict]) -> list[str]:
+    """
+    Génère des suggestions CV à partir des compétences manquantes interprétées.
+    """
+    suggestions = []
+
+    for comp in missing_competencies:
+        concept = comp.get("concept")
+        advice = comp.get("advice", "")
+
+        if concept == "specifique_metier":
+            continue
+
+        if concept == "organisation_coordination":
+            suggestions.append(
+                "Ajoute ou reformule une expérience montrant la planification, la coordination ou le suivi d'activités."
+            )
+
+        elif concept == "suivi_analyse_donnees":
+            suggestions.append(
+                "Mets en avant l’utilisation d’outils comme Excel, reporting ou tableaux de bord avec des exemples concrets."
+            )
+
+        elif concept == "management":
+            suggestions.append(
+                "Si tu as encadré ou coordonné des personnes, mentionne-le explicitement avec des résultats ou responsabilités."
+            )
+
+        elif concept == "relation_client":
+            suggestions.append(
+                "Ajoute des exemples concrets de relation client : accueil, conseil, suivi ou gestion de demandes."
+            )
+
+        elif concept == "communication":
+            suggestions.append(
+                "Décris précisément tes actions de communication : contenus créés, réseaux utilisés, objectifs atteints."
+            )
+
+        elif concept == "outils_bureautiques":
+            suggestions.append(
+                "Précise les outils bureautiques maîtrisés (Word, Excel, PowerPoint) et leur usage concret."
+            )
+
+        elif concept == "outils_techniques":
+            suggestions.append(
+                "Indique clairement les outils ou technologies utilisés ainsi que ton niveau de maîtrise."
+            )
+
+        elif concept == "logistique_stock":
+            suggestions.append(
+                "Ajoute des expériences liées à la gestion de stock, réception, inventaire ou flux logistiques."
+            )
+
+        elif concept == "qualite_conformite":
+            suggestions.append(
+                "Mentionne les procédures, contrôles qualité ou normes que tu as appliqués."
+            )
+
+        elif concept == "soft_skills":
+            suggestions.append(
+                "Ajoute un exemple concret illustrant ta rigueur, ton autonomie ou ton travail en équipe."
+            )
+
+        else:
+            if advice:
+                suggestions.append(advice)
+
+    return list(dict.fromkeys(suggestions))
+
+
+def dedupe_keep_order(values: List[str]) -> List[str]:
+    result = []
+    seen = set()
+
+    for value in values:
+        cleaned = " ".join(str(value).strip().split())
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            seen.add(key)
+            result.append(cleaned)
+
+    return result
 
 
 def is_generic_topic_term(term: str) -> bool:
@@ -373,197 +521,6 @@ def topics_to_skills(topics: List[str]) -> List[str]:
     return unique_skills[:8]
 
 
-def classify_term(term: str) -> str:
-    t = (term or "").lower().strip()
-
-    if not t:
-        return "generic"
-
-    language_markers = {
-        "anglais", "espagnol", "allemand", "italien", "portugais",
-        "arabe", "chinois", "japonais", "russe", "bilingue",
-        "toeic", "toefl", "ielts"
-    }
-    if any(k in t for k in language_markers):
-        return "language"
-
-    diploma_markers = {
-        "bac", "bachelor", "master", "licence", "bts", "dut", "but",
-        "formation", "certification", "certifie", "certifiée",
-        "diplome", "diplôm", "titre professionnel", "rncp"
-    }
-    if any(k in t for k in diploma_markers):
-        return "diploma"
-
-    soft_skill_markers = {
-        "autonomie", "rigueur", "organisation", "adaptabilite",
-        "adaptation", "relationnel", "communication", "ecoute",
-        "esprit analyse", "analyse", "proactivite", "initiative",
-        "travail equipe", "travail en equipe", "polyvalence",
-        "motivation", "dynamisme", "curiosite", "leadership"
-    }
-    if any(k in t for k in soft_skill_markers):
-        return "soft_skill"
-
-    management_markers = {
-        "gestion", "coordination", "pilotage", "organisation",
-        "suivi", "planification", "planning", "encadrement",
-        "management", "manager", "responsable", "supervision",
-        "budget", "budgets", "reporting", "chef de projet"
-    }
-    if any(k in t for k in management_markers):
-        return "management"
-
-    client_markers = {
-        "client", "clients", "vente", "ventes", "accueil",
-        "service", "support", "conseil", "commercial",
-        "prospection", "negociation", "fidélisation", "fidelisation",
-        "relation client", "satisfaction", "sav"
-    }
-    if any(k in t for k in client_markers):
-        return "client"
-
-    analysis_markers = {
-        "analyse", "donnees", "données", "data", "reporting",
-        "tableau de bord", "indicateur", "indicateurs",
-        "statistique", "statistiques", "analytics", "kpi"
-    }
-    if any(k in t for k in analysis_markers):
-        return "analysis"
-
-    software_markers = {
-        "logiciel", "logiciels", "outil", "outils", "application",
-        "applications", "plateforme", "plateformes", "erp", "crm",
-        "cms", "saas", "api", "base de donnees", "base de données",
-        "bureautique", "informatique", "digital", "numerique", "numérique"
-    }
-
-    software_examples = {
-        "excel", "word", "powerpoint", "outlook", "sap", "salesforce",
-        "wordpress", "canva", "photoshop", "illustrator", "indesign",
-        "premiere", "google analytics", "sql", "python", "java",
-        "html", "css", "javascript", "typescript", "php", "c++",
-        "c#", "react", "angular", "vue", "docker", "kubernetes",
-        "jira", "trello", "notion", "figma", "autocad", "matlab",
-        "solidworks", "power bi", "tableau", "qlik"
-    }
-
-    has_tech_shape = (
-        "/" in t
-        or "+" in t
-        or "#" in t
-        or any(x in t for x in ["sql", "api", "crm", "erp", "cms", "bi"])
-    )
-
-    if (
-        any(k in t for k in software_markers)
-        or any(k in t for k in software_examples)
-        or has_tech_shape
-    ):
-        return "software"
-
-    return "generic"
-
-
-def suggest_for_term(term: str, category: str) -> str:
-    if category == "software":
-        return (
-            f"Si vous maîtrisez réellement « {term} », citez-le explicitement "
-            f"dans une expérience ou dans la rubrique compétences."
-        )
-
-    if category == "language":
-        return (
-            f"Si « {term} » correspond à votre profil, indiquez-le avec un niveau précis sur le CV."
-        )
-
-    if category == "diploma":
-        return (
-            f"Vérifiez que « {term} » est visible rapidement dans la partie formation ou certifications."
-        )
-
-    if category == "soft_skill":
-        return (
-            f"Pour « {term} », privilégiez un exemple concret dans une expérience plutôt qu’une simple liste de qualités."
-        )
-
-    if category == "management":
-        return (
-            f"Si vous avez réellement exercé « {term} », reformulez une mission pour le faire apparaître plus clairement."
-        )
-
-    if category == "client":
-        return (
-            f"Si « {term} » fait partie de votre expérience, mettez-le en avant dans une mission ou un résultat concret."
-        )
-
-    if category == "analysis":
-        return (
-            f"Si vous avez déjà réalisé « {term} », précisez-le dans une expérience avec un exemple concret."
-        )
-
-    return (
-        f"Vérifiez si « {term} » correspond à une compétence ou mission réelle déjà présente, "
-        f"et reformulez-la plus explicitement si nécessaire."
-    )
-
-
-def build_cv_suggestions(missing_terms: List[str], max_suggestions: int = 6) -> List[str]:
-    suggestions = []
-
-    for term in missing_terms[:12]:
-        category = classify_term(term)
-        suggestion = suggest_for_term(term, category)
-        suggestions.append(suggestion)
-
-    unique = []
-    seen = set()
-
-    for s in suggestions:
-        if s not in seen:
-            seen.add(s)
-            unique.append(s)
-
-    return unique[:max_suggestions]
-
-
-def is_clean_term(term: str) -> bool:
-    words = term.split()
-
-    if len(words) > 4:
-        return False
-
-    if any(w in STOPWORDS for w in words):
-        return False
-
-    generic_words = {
-        "agent", "profil", "poste", "travail", "mission", "metier",
-        "qualites", "qualite", "organisation", "adaptation", "agenda",
-        "experience", "competence", "formation", "service"
-    }
-    if any(w in generic_words for w in words):
-        return False
-
-    if any(len(w) < 3 for w in words):
-        return False
-
-    return True
-
-
-def dedupe_keep_order(values: List[str]) -> List[str]:
-    result = []
-    seen = set()
-
-    for value in values:
-        cleaned = " ".join(str(value).strip().split())
-        key = cleaned.lower()
-        if cleaned and key not in seen:
-            seen.add(key)
-            result.append(cleaned)
-
-    return result
-
-
 # =========================================================
 # 1) IMPORTER LE CV
 # =========================================================
@@ -572,6 +529,7 @@ st.subheader("1) Importer votre CV")
 uploaded = st.file_uploader(
     "Dépose ton CV (PDF, DOCX ou TXT)",
     type=["pdf", "docx", "txt"],
+    key="cv_uploader_main"
 )
 
 cv_text = ""
@@ -826,7 +784,6 @@ if st.button("Rechercher et classer"):
                 title_text = to_text(o.get("title", "")).lower()
                 description_lower = description.lower()
 
-                # 1) Cohérence des familles
                 if cv_main_family and offer_main_family and cv_main_family == offer_main_family:
                     adjusted_score += 12
                 elif offer_main_family and offer_main_family in cv_families[:2]:
@@ -837,7 +794,6 @@ if st.button("Rechercher et classer"):
                 family_overlap = len(set(cv_families[:3]) & set(offer_families[:3]))
                 adjusted_score += family_overlap * 4
 
-                # 2) Bonus métier principal
                 main_job_label_lower = main_job_label.lower()
 
                 if main_job_label_lower and main_job_label_lower in title_text:
@@ -845,7 +801,6 @@ if st.button("Rechercher et classer"):
                 elif main_job_label_lower and main_job_label_lower in description_lower:
                     adjusted_score += 12
 
-                # 3) Bonus métiers proches
                 for job in related_jobs:
                     if isinstance(job, dict):
                         related_label = job.get("job", "").lower()
@@ -860,7 +815,6 @@ if st.button("Rechercher et classer"):
                     elif related_label in description_lower:
                         adjusted_score += 6
 
-                # 4) Bonus mots-clés suggérés
                 keyword_values = [
                     k.strip().lower()
                     for k in st.session_state.get("keywords_input", "").split(",")
@@ -873,7 +827,6 @@ if st.button("Rechercher et classer"):
                     elif kw in description_lower:
                         adjusted_score += 3
 
-                # 5) Léger malus si le titre est éloigné
                 title_has_signal = False
 
                 if main_job_label_lower and main_job_label_lower in title_text:
@@ -972,44 +925,101 @@ if st.button("Analyser CV vs Offre"):
 analysis = st.session_state.get("last_analysis")
 
 if analysis:
+    score = analysis.get("score", 0)
+    interpretation = interpret_score(score)
+
+    coverage = analysis.get("coverage_score", 0)
+    bonus = analysis.get("bonus", 0)
+    family_bonus = analysis.get("family_bonus", 0)
+
     st.markdown("### Score de compatibilité")
-    st.markdown(f"## {analysis.get('score', 0)}/100")
+    st.markdown(f"## {score}/100 — {interpretation}")
+
+    st.caption(
+        f"Score basé sur : "
+        f"{coverage}% de correspondance des termes, "
+        f"+{bonus} bonus expressions, "
+        f"+{family_bonus} bonus cohérence métier"
+    )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### Forces (mots trouvés)")
+        st.markdown("### Forces principales")
+
         matched_terms = analysis.get("matched_terms", [])
-        if matched_terms:
-            for term in matched_terms[:12]:
+        display_matched_terms = prepare_display_terms(matched_terms, max_items=8)
+
+        if display_matched_terms:
+            for term in display_matched_terms:
                 st.write(f"- {term}")
         else:
-            st.write("Aucune correspondance détectée.")
+            st.write("Aucune force principale détectée.")
 
     with col2:
-        st.markdown("### Manques (mots absents)")
-        missing_terms = [
-            t for t in analysis.get("missing_terms", [])
-            if is_clean_term(t)
+        st.markdown("### Compétences manquantes identifiées")
+
+        missing_competencies = analysis.get("missing_competencies", [])
+
+        visible_missing_competencies = [
+            comp for comp in missing_competencies
+            if comp.get("concept") != "specifique_metier"
         ]
 
-        if missing_terms:
-            for term in missing_terms[:12]:
+        if visible_missing_competencies:
+            for comp in visible_missing_competencies:
+                label = comp.get("label", "Compétence")
+                advice = comp.get("advice", "")
+                source_terms = comp.get("source_terms", [])
+
+                st.markdown(f"**{label}**")
+
+                if source_terms:
+                    st.caption("Termes repérés : " + ", ".join(source_terms[:5]))
+
+                if advice:
+                    st.write(advice)
+
+                st.write("")
+        else:
+            st.write("Aucune compétence manquante interprétée.")
+
+    with st.expander("Voir le détail technique (debug)"):
+        st.markdown("#### Détail du score")
+        st.write(f"Coverage : {coverage}%")
+        st.write(f"Bonus expressions : +{bonus}")
+        st.write(f"Bonus familles : +{family_bonus}")
+
+        st.markdown("#### Mots trouvés (brut)")
+        raw_matched_terms = analysis.get("matched_terms", [])
+
+        if raw_matched_terms:
+            for term in raw_matched_terms:
                 st.write(f"- {term}")
         else:
-            st.write("Aucun manque détecté.")
+            st.write("Aucun mot trouvé.")
+
+        st.markdown("#### Mots absents (brut)")
+        raw_missing_terms = analysis.get("missing_terms", [])
+
+        if raw_missing_terms:
+            for term in raw_missing_terms:
+                st.write(f"- {term}")
+        else:
+            st.write("Aucun mot absent.")
 
     st.markdown("### Mots forts")
-    strong_terms = analysis.get("matched_terms", [])[:8]
+    strong_terms = prepare_display_terms(analysis.get("matched_terms", []), max_items=8)
+
     if strong_terms:
         st.write(", ".join(strong_terms))
     else:
         st.write("Aucun mot fort détecté.")
 
     st.markdown("### Suggestions pour améliorer le CV")
-    suggestions = build_cv_suggestions(
-        missing_terms=analysis.get("missing_terms", [])
-    )
+
+    missing_competencies = analysis.get("missing_competencies", [])
+    suggestions = build_cv_suggestions_from_competencies(missing_competencies)
 
     if suggestions:
         for suggestion in suggestions:

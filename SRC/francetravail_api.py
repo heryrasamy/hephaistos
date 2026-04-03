@@ -5,8 +5,8 @@ import time
 # =========================================================
 # CONFIG — À PERSONNALISER AVEC TES IDENTIFIANTS
 # =========================================================
-CLIENT_ID = "******************"
-CLIENT_SECRET = "*******************"
+CLIENT_ID = "PAR_hephaistos_f07261c0287f59a7738be08a57c97fda5d464d9b3bc27bedc606e5e688039d2a"
+CLIENT_SECRET = "6ea9f5fb153c5260df07adfb943bbe42adc67a131ae2ef38671d21092c06a75e"
 
 TOKEN_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
 OFFERS_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
