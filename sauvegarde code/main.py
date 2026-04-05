@@ -6,7 +6,7 @@ from typing import List
 import streamlit as st
 
 from cv_extract import extract_text_from_upload
-from matching_simple import score_cv_offer, STOPWORDS,get_top_cv_families
+from matching_simple import score_cv_offer, STOPWORDS
 from job_inference import (
     build_job_inference_summary,
     build_search_queries_from_job_summary,
@@ -103,19 +103,6 @@ GENERIC_TOPIC_TERMS = {
 # =========================================================
 # UTILS
 # =========================================================
-FAMILY_LABELS = {
-    "administratif_gestion": "Administratif & Gestion",
-    "relation_client_accueil": "Relation Client & Accueil",
-    "communication_marketing": "Communication & Marketing",
-    "informatique_tech": "Informatique & Technique",
-    "production_logistique": "Production & Logistique",
-    "sante_soin": "Santé & Soin",
-    "education_formation": "Éducation & Formation",
-    "commerce_vente": "Commerce & Vente",
-    "batiment_travaux": "Bâtiment & Travaux",
-    "securite": "Sécurité",
-}
-
 def to_text(x) -> str:
     if x is None:
         return ""
@@ -124,6 +111,270 @@ def to_text(x) -> str:
     if isinstance(x, (list, tuple)):
         return " ".join(str(i) for i in x if i is not None)
     return str(x)
+
+def interpret_score(score: int) -> str:
+    """
+    Transforme un score brut en lecture humaine simple.
+    """
+    if score >= 75:
+        return "Très bonne compatibilité"
+    if score >= 55:
+        return "Compatibilité intéressante"
+    if score >= 35:
+        return "Compatibilité partielle"
+    return "Compatibilité faible"
+
+
+def build_offer_summary(result: dict) -> str:
+    """
+    Produit un résumé court et humain du niveau d'adéquation.
+    """
+    score = int(result.get("score", 0))
+    interpretation = interpret_score(score)
+
+    if score >= 75:
+        return (
+            f"Cette offre semble bien correspondre à ton profil. "
+            f"Ton CV couvre déjà une partie importante des attentes de l'annonce."
+        )
+
+    if score >= 55:
+        return (
+            f"Cette offre présente une base solide de compatibilité. "
+            f"Ton profil est crédible, même si certains éléments gagneraient à être mieux mis en avant."
+        )
+
+    if score >= 35:
+        return (
+            f"Cette offre reste accessible, mais le lien entre ton CV et l'annonce n'est pas encore assez net. "
+            f"Il faut surtout clarifier les points communs et mieux valoriser les expériences utiles."
+        )
+
+    return (
+        f"Cette offre paraît encore assez éloignée de ton profil actuel. "
+        f"Elle peut servir de repère pour comprendre ce qu'il manque ou ce qu'il faudrait reformuler."
+    )
+
+
+def humanize_matched_terms(matched_terms: list, limit: int = 5) -> str:
+    """
+    Reformule les points forts de façon plus naturelle.
+    """
+    if not matched_terms:
+        return "Aucun point fort clairement identifié par l'analyse automatique."
+
+    selected = matched_terms[:limit]
+    joined = ", ".join(selected)
+
+    return (
+        f"Les éléments les plus visibles dans ton CV pour cette offre sont : {joined}."
+    )
+
+
+def humanize_missing_terms(missing_terms: list, limit: int = 5) -> str:
+    """
+    Reformule les manques comme un diagnostic métier simple.
+    """
+    if not missing_terms:
+        return (
+            "L'analyse ne repère pas de manque majeur dans les mots-clés principaux de l'annonce."
+        )
+
+    selected = missing_terms[:limit]
+    joined = ", ".join(selected)
+
+    return (
+        f"L'annonce insiste davantage sur : {joined}. "
+        f"Ce ne sont pas forcément des absences réelles, mais ce sont des éléments qui ne ressortent pas assez dans ton CV."
+    )
+
+
+def build_action_tips(result: dict) -> list[str]:
+    """
+    Génère des conseils concrets orientés action, sans modifier le scoring.
+    """
+    matched_terms = result.get("matched_terms", []) or []
+    missing_terms = result.get("missing_terms", []) or []
+    score = int(result.get("score", 0))
+
+    tips = []
+
+    if score < 55:
+        tips.append(
+            "Relis le titre du poste et adapte l'accroche de ton CV pour montrer plus vite le lien avec l'annonce."
+        )
+
+    if missing_terms:
+        tips.append(
+            "Ajoute des exemples concrets d'expériences, de missions ou d'outils liés aux attentes les moins visibles."
+        )
+
+    if matched_terms:
+        tips.append(
+            "Renforce les points déjà compatibles en les plaçant plus haut dans le CV ou en les formulant plus clairement."
+        )
+
+    tips.append(
+        "Utilise les mots du recruteur quand ils correspondent réellement à ton expérience, afin de rendre ton profil plus lisible."
+    )
+
+    return tips[:4]
+
+def refine_generated_queries(cv_text: str, queries: list[str]) -> list[str]:
+    """
+    Corrige les requêtes trop génériques en fonction du contexte dominant du CV.
+    Version minimale : spécialisation du cas musique / violon / orchestre / enseignement artistique.
+    """
+    text = to_text(cv_text).lower()
+    normalized_queries = [to_text(q).strip().lower() for q in (queries or []) if to_text(q).strip()]
+
+    has_music_context = any(
+        keyword in text
+        for keyword in [
+            "violon",
+            "musique",
+            "orchestre",
+            "musicien",
+            "musicienne",
+            "conservatoire",
+            "musique de chambre",
+            "professeure de violon",
+            "professeur de violon",
+        ]
+    )
+
+    has_teaching_context = any(
+        keyword in text
+        for keyword in [
+            "cours particuliers",
+            "professeure",
+            "professeur",
+            "enseignement",
+            "acadomia",
+            "pédagog",
+        ]
+    )
+
+    if not has_music_context:
+        return queries or []
+
+    refined = []
+
+    for q in normalized_queries:
+
+        if q in {"culture", "artistique", "domaine", "secteur"}:
+            continue
+
+        if q in {"formateur", "formation", "charge de formation", "chargé de formation"}:
+            continue
+
+        if q == "animateur pédagogique":
+            refined.append("intervenant musique")
+            continue
+
+        refined.append(q)
+
+    if has_teaching_context:
+        refined.extend([
+            "professeur de violon",
+            "cours particuliers violon",
+            "intervenant musique",
+        ])
+
+    refined.extend([
+        "musicien orchestre",
+        "violoniste",
+        "animation musicale",
+        "médiation culturelle musique",
+    ])
+
+    # Déduplication en gardant l'ordre
+    final_queries = []
+    seen = set()
+
+    for q in refined:
+        clean_q = to_text(q).strip()
+        key = clean_q.lower()
+        if clean_q and key not in seen:
+            seen.add(key)
+            final_queries.append(clean_q)
+
+    return final_queries[:8]
+
+def rebalance_job_summary(cv_text: str, job_summary: dict) -> dict:
+    """
+    Rééquilibre localement le résumé métier quand un CV artistique/musical
+    est mal résumé comme 'formateur' ou 'formation' générique.
+    """
+    if not isinstance(job_summary, dict):
+        return job_summary
+
+    text = to_text(cv_text).lower()
+
+    music_markers = [
+        "violon",
+        "violoniste",
+        "musique",
+        "orchestre",
+        "musique de chambre",
+        "conservatoire",
+        "cpes",
+        "chambre symphonique",
+    ]
+
+    teaching_markers = [
+        "professeure de violon",
+        "professeur de violon",
+        "cours particuliers",
+        "acadomia",
+        "enseignement",
+        "pédagog",
+    ]
+
+    music_score = sum(1 for marker in music_markers if marker in text)
+    teaching_score = sum(1 for marker in teaching_markers if marker in text)
+
+    current_main_job = to_text(job_summary.get("main_job", "")).lower()
+    current_domain = to_text(job_summary.get("domain", "")).lower()
+    current_related_jobs = job_summary.get("related_jobs", []) or []
+
+    if music_score < 2:
+        return job_summary
+
+    rebalanced = dict(job_summary)
+
+    # Si le CV est clairement musical, la culture doit dominer.
+    if current_main_job in {"formateur", "formatrice", "enseignant", "enseignante"}:
+        if teaching_score >= 1:
+            rebalanced["main_job"] = "professeur de violon"
+        else:
+            rebalanced["main_job"] = "violoniste"
+
+    if current_domain in {"formation", "enseignement", "pédagogie"} or not current_domain:
+        rebalanced["domain"] = "culture"
+
+    preferred_related_jobs = [
+        "violoniste",
+        "musicien d'orchestre",
+        "professeur de violon",
+        "intervenant musique",
+        "animation musicale",
+        "médiation culturelle musique",
+    ]
+
+    merged_related_jobs = []
+    seen = set()
+
+    for job in preferred_related_jobs + current_related_jobs:
+        clean_job = to_text(job).strip()
+        key = clean_job.lower()
+        if clean_job and key not in seen:
+            seen.add(key)
+            merged_related_jobs.append(clean_job)
+
+    rebalanced["related_jobs"] = merged_related_jobs[:6]
+
+    return rebalanced
 
 
 def format_family_labels(families: List[str]) -> List[str]:
@@ -559,17 +810,9 @@ related_jobs = []
 if uploaded:
     file_bytes = uploaded.read()
     cv_text = to_text(extract_text_from_upload(uploaded.name, file_bytes))
-    cv_families = get_top_cv_families(cv_text, top_n=3)
-    main_family = cv_families[0] if cv_families else "inconnu"
-    secondary_families = cv_families[1:] if len(cv_families) > 1 else []
+
     st.success(f"CV importé — {len(cv_text)} caractères")
-    st.write(f"Ton profil est principalement orienté vers : **{FAMILY_LABELS.get(main_family, main_family)}**")
-    secondary_labels = [FAMILY_LABELS.get(f, f) for f in secondary_families]
-    st.write("Ton CV montre aussi des éléments en :")
-    for label in secondary_labels:
-        st.write(f"- {label}")
-    st.write("Cette lecture signifie surtout que ton CV présente un axe principal, mais aussi plusieurs compétences secondaires utiles selon le poste visé.")    
-    
+
     cv_terms_for_inference = cv_text.split()
 
     topics_raw = detect_cv_topics(cv_text)
@@ -595,7 +838,7 @@ if uploaded:
         cv_terms=cv_terms_for_inference,
         top_n=3
     )
-
+    
     main_job_data = job_summary.get("main_job", {})
     related_jobs = job_summary.get("related_jobs", [])
 
@@ -618,26 +861,35 @@ if uploaded:
         first_related = related_jobs[0]
         if isinstance(first_related, dict):
             first_related_label = first_related.get("job", "")
-        else:
-            first_related_label = str(first_related)
+    job_summary = build_job_inference_summary(
+    detected_families=cv_families,
+    cv_terms=cv_terms_for_inference,
+    top_n=3
+)
+job_summary = rebalance_job_summary(cv_text, job_summary)
 
-        if first_related_label and first_related_label not in keyword_candidates:
-            keyword_candidates.append(first_related_label)
+main_job_data = job_summary.get("main_job", {})
+related_jobs = job_summary.get("related_jobs", [])
 
-    if not keyword_candidates:
-        keyword_candidates = topics[:2]
+if isinstance(main_job_data, dict):
+    main_job_label = main_job_data.get("job", "inconnu")
+    domain_label = main_job_data.get("domain", "inconnu")
+else:
+    main_job_label = main_job_data or "inconnu"
+    domain_label = job_summary.get("domain", "inconnu")
 
-    new_keywords_value = ", ".join(keyword_candidates[:3])
-    st.session_state["suggested_keywords"] = new_keywords_value
-    st.session_state["keywords_input"] = new_keywords_value
+search_queries = build_search_queries_from_job_summary(
+    job_summary=job_summary,
+    topics=topics,
+    max_queries=5
+)
+search_queries = refine_generated_queries(cv_text, search_queries)
 
-    search_queries = build_search_queries_from_job_summary(
-        job_summary=job_summary,
-        topics=topics,
-        max_queries=5
-    )
+st.session_state["generated_queries"] = search_queries
 
-    st.session_state["generated_queries"] = search_queries
+new_keywords_value = ", ".join(search_queries[:3])
+st.session_state["suggested_keywords"] = new_keywords_value
+st.session_state["keywords_input"] = new_keywords_value  
 
 with st.expander("Voir le texte extrait"):
     st.write(cv_text)
@@ -764,9 +1016,7 @@ if st.button("Rechercher et classer"):
             manual_keywords = [k.strip() for k in keywords.split(",") if k.strip()]
             queries.extend(manual_keywords)
 
-        for q in st.session_state.get("generated_queries", []):
-            if q not in queries:
-                queries.append(q)
+        queries = list(st.session_state.get("generated_queries", []))
 
         queries = dedupe_keep_order(queries)
 
@@ -941,7 +1191,32 @@ if st.button("Analyser CV vs Offre"):
             to_text(cv_text),
             to_text(offer_text)
         )
-        st.session_state["last_analysis"] = result
+        summary_text = build_offer_summary(result)
+score_value = int(result.get("score", 0))
+score_label = interpret_score(score_value)
+
+st.markdown("### Lecture humaine du score")
+st.write(f"**Score :** {score_value}/100")
+st.write(f"**Interprétation :** {score_label}")
+
+st.markdown("### Résumé rapide")
+st.info(summary_text)
+
+st.markdown("### Ce que ton profil montre déjà")
+st.write(matched_text)
+
+st.markdown("### Ce qu'il faudrait mieux faire ressortir")
+st.write(missing_text)
+
+action_tips = build_action_tips(result)
+
+if action_tips:
+    st.markdown("### Conseils concrets pour améliorer la candidature")
+    for tip in action_tips:
+        st.write(f"• {tip}")
+
+st.markdown("---")
+st.session_state["last_analysis"] = result
 
 analysis = st.session_state.get("last_analysis")
 
@@ -966,50 +1241,16 @@ if analysis:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### Forces principales")
-
-        matched_terms = analysis.get("matched_terms", [])
-        display_matched_terms = prepare_display_terms(matched_terms, max_items=8)
-
-        if display_matched_terms:
-            for term in display_matched_terms:
-                st.write(f"- {term}")
-        else:
-            st.write("Aucune force principale détectée.")
+               
+        st.write("Aucune force principale détectée.")
 
     with col2:
-        st.markdown("### Compétences manquantes identifiées")
-
-        missing_competencies = analysis.get("missing_competencies", [])
-
-        visible_missing_competencies = [
-            comp for comp in missing_competencies
-            if comp.get("concept") != "specifique_metier"
-        ]
-
-        if visible_missing_competencies:
-            for comp in visible_missing_competencies:
-                label = comp.get("label", "Compétence")
-                advice = comp.get("advice", "")
-                source_terms = comp.get("source_terms", [])
-
-                st.markdown(f"**{label}**")
-
-                if source_terms:
-                    st.caption("Termes repérés : " + ", ".join(source_terms[:5]))
-
-                if advice:
-                    st.write(advice)
-
-                st.write("")
-        else:
-            st.write("Aucune compétence manquante interprétée.")
-
-    with st.expander("Voir le détail technique (debug)"):
-        st.markdown("#### Détail du score")
-        st.write(f"Coverage : {coverage}%")
-        st.write(f"Bonus expressions : +{bonus}")
-        st.write(f"Bonus familles : +{family_bonus}")
+        
+        with st.expander("Voir le détail technique (debug)"):
+            st.markdown("#### Détail du score")
+            st.write(f"Coverage : {coverage}%")
+            st.write(f"Bonus expressions : +{bonus}")
+            st.write(f"Bonus familles : +{family_bonus}")
 
         st.markdown("#### Mots trouvés (brut)")
         raw_matched_terms = analysis.get("matched_terms", [])
@@ -1029,15 +1270,13 @@ if analysis:
         else:
             st.write("Aucun mot absent.")
 
-    st.markdown("### Mots forts")
-    strong_terms = prepare_display_terms(analysis.get("matched_terms", []), max_items=8)
+    with st.expander("Voir les détails techniques de l'analyse"):
+        st.markdown("## Mots forts")
+        st.write(", ".join(matched_terms) if matched_terms else "Aucun mot fort détecté.")
 
-    if strong_terms:
-        st.write(", ".join(strong_terms))
-    else:
-        st.write("Aucun mot fort détecté.")
-
-    st.markdown("### Suggestions pour améliorer le CV")
+        st.markdown("## Suggestions pour améliorer le CV")
+    for tip in suggestions:
+        st.write(f"• {tip}")
 
     missing_competencies = analysis.get("missing_competencies", [])
     suggestions = build_cv_suggestions_from_competencies(missing_competencies)

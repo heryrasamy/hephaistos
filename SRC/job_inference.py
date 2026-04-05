@@ -353,6 +353,48 @@ def build_job_inference_summary(
                 "domain": domain,
                 "family": family,
             })
+                # ---------------------------------------------------------
+    # Priorité métier : musique / violon / orchestre
+    # Corrige le biais "formation générique" quand le CV est
+    # clairement artistique avec une composante pédagogique.
+    # ---------------------------------------------------------
+    cv_terms_lower = {str(term).strip().lower() for term in cv_terms if str(term).strip()}
+
+    music_markers = {
+        "violon", "violoniste", "musique", "orchestre", "conservatoire",
+        "chambre", "cpes", "musicolus", "acadomia"
+    }
+
+    music_hits = sum(1 for marker in music_markers if marker in cv_terms_lower)
+
+    if music_hits >= 3:
+        prioritized_music_jobs = [
+            {"job": "professeur de violon", "domain": "culture", "family": "culture"},
+            {"job": "violoniste", "domain": "culture", "family": "culture"},
+            {"job": "musicien d'orchestre", "domain": "culture", "family": "culture"},
+            {"job": "intervenant musique", "domain": "culture", "family": "culture"},
+            {"job": "animation musicale", "domain": "culture", "family": "culture"},
+        ]
+
+        existing_keys = {
+            (
+                str(job.get("job", "")).strip().lower(),
+                str(job.get("domain", "")).strip().lower()
+            )
+            for job in ranked_jobs
+            if isinstance(job, dict)
+        }
+
+        music_jobs_to_add = []
+        for job in prioritized_music_jobs:
+            key = (
+                str(job.get("job", "")).strip().lower(),
+                str(job.get("domain", "")).strip().lower()
+            )
+            if key not in existing_keys:
+                music_jobs_to_add.append(job)
+
+        ranked_jobs = music_jobs_to_add + ranked_jobs
 
     main_job = ranked_jobs[0] if ranked_jobs else {"job": "inconnu", "domain": "inconnu", "family": ""}
     related_jobs = ranked_jobs[1:4] if len(ranked_jobs) > 1 else []
