@@ -533,6 +533,44 @@ def topics_to_skills(topics: List[str]) -> List[str]:
 
     return unique_skills[:8]
 
+def infer_sub_family(topics, main_family):
+    topics_joined = " ".join(topics).lower()
+
+    # ADMINISTRATIF
+    if main_family == "administratif_gestion":
+        if any(word in topics_joined for word in ["saisie", "donnee", "excel"]):
+            return "Traitement de données"
+        if any(word in topics_joined for word in ["accueil", "telephone"]):
+            return "Accueil & secrétariat"
+        if any(word in topics_joined for word in ["compta", "facturation"]):
+            return "Gestion comptable"
+        return "Support administratif"
+
+    # COMMUNICATION
+    if main_family == "communication_marketing":
+        if "reseaux sociaux" in topics_joined:
+            return "Communication digitale"
+        if "contenu" in topics_joined:
+            return "Création de contenu"
+        return "Communication générale"
+
+    # LOGISTIQUE
+    if main_family == "production_logistique":
+        if "stock" in topics_joined:
+            return "Gestion de stock"
+        return "Opérations logistiques"
+
+    return "Généraliste"
+
+def display_family_label(family):
+    if not family:
+        return "Inconnu"
+
+    return FAMILY_LABELS.get(
+        family,
+        family.replace("_", " ").capitalize()
+    )
+
 
 # =========================================================
 # 1) IMPORTER LE CV
@@ -555,21 +593,59 @@ cv_terms_for_inference: List[str] = []
 main_job_label = "inconnu"
 domain_label = "inconnu"
 related_jobs = []
+selected_family = st.session_state.get("selected_family")
+
+cv_families = get_top_cv_families(cv_text, top_n=3)
+main_family = cv_families[0] if cv_families else "inconnu"
+
+selected_family = st.session_state.get("selected_family")
+
+if selected_family == main_family:
+    st.session_state["selected_family"] = None
+    selected_family = None
+has_user_override = selected_family is not None
+direction_family = selected_family if has_user_override else main_family    
 
 if uploaded:
+    uploaded.seek(0)
     file_bytes = uploaded.read()
+
+    if not file_bytes:
+        st.error("Fichier vide ou illisible. Recharge le CV.")
+        st.stop()
+
     cv_text = to_text(extract_text_from_upload(uploaded.name, file_bytes))
+
+    # ------------------------
+    # Reset seulement si nouveau fichier
+    # ------------------------
+    if (
+        "last_uploaded_name" not in st.session_state
+        or st.session_state["last_uploaded_name"] != uploaded.name
+    ):
+        st.session_state["selected_family"] = None
+        st.session_state["last_uploaded_name"] = uploaded.name
+
+    # ------------------------
+    # Base familles / direction
+    # ------------------------
     cv_families = get_top_cv_families(cv_text, top_n=3)
     main_family = cv_families[0] if cv_families else "inconnu"
     secondary_families = cv_families[1:] if len(cv_families) > 1 else []
-    st.success(f"CV importé — {len(cv_text)} caractères")
-    st.write(f"Ton profil est principalement orienté vers : **{FAMILY_LABELS.get(main_family, main_family)}**")
-    secondary_labels = [FAMILY_LABELS.get(f, f) for f in secondary_families]
-    st.write("Ton CV montre aussi des éléments en :")
-    for label in secondary_labels:
-        st.write(f"- {label}")
-    st.write("Cette lecture signifie surtout que ton CV présente un axe principal, mais aussi plusieurs compétences secondaires utiles selon le poste visé.")    
-    
+    detected_families = get_top_cv_families(cv_text, top_n=5)
+
+    selected_family = st.session_state.get("selected_family")
+
+    if selected_family == main_family:
+        st.session_state["selected_family"] = None
+        selected_family = None
+
+    has_user_override = selected_family is not None
+    direction_family = selected_family if has_user_override else main_family
+
+    # ------------------------
+    # Extraction thèmes / compétences
+    # ------------------------
     cv_terms_for_inference = cv_text.split()
 
     topics_raw = detect_cv_topics(cv_text)
@@ -586,10 +662,12 @@ if uploaded:
                 break
 
     topics = dedupe_keep_order(topics)
-
-    cv_families = get_top_cv_families(cv_text)
     skills = topics_to_skills(topics)
+    sub_family = infer_sub_family(topics, direction_family)
 
+    # ------------------------
+    # Résumé métier
+    # ------------------------
     job_summary = build_job_inference_summary(
         detected_families=cv_families,
         cv_terms=cv_terms_for_inference,
@@ -606,12 +684,18 @@ if uploaded:
         main_job_label = main_job_data or "inconnu"
         domain_label = job_summary.get("domain", "inconnu")
 
+    # ------------------------
+    # Mots-clés suggérés
+    # ------------------------
     keyword_candidates = []
 
-    if main_job_label and main_job_label != "inconnu":
+    if sub_family and sub_family != "Généraliste":
+        keyword_candidates.append(sub_family)
+
+    if main_job_label and main_job_label != "inconnu" and main_job_label not in keyword_candidates:
         keyword_candidates.append(main_job_label)
 
-    if domain_label and domain_label != "inconnu" and domain_label != main_job_label:
+    if domain_label and domain_label != "inconnu" and domain_label != main_job_label and domain_label not in keyword_candidates:
         keyword_candidates.append(domain_label)
 
     if related_jobs:
@@ -636,40 +720,124 @@ if uploaded:
         topics=topics,
         max_queries=5
     )
-
     st.session_state["generated_queries"] = search_queries
 
-with st.expander("Voir le texte extrait"):
-    st.write(cv_text)
+    # ------------------------
+    # Étape 2B.11A — enrichir les requêtes avec la sous-famille
+    # ------------------------
+    if sub_family and sub_family != "Généraliste":
+        enriched_queries = []
 
-st.markdown("### Thèmes dominants détectés dans votre CV")
-if topics:
-    cols = st.columns(4)
-    for i, t in enumerate(topics[:8]):
-        cols[i % 4].info(t)
-else:
-    st.write("Aucun thème dominant détecté.")
+        for q in search_queries:
+            enriched_queries.append(q)
 
-if cv_families:
-    st.markdown("### Familles métier dominantes détectées")
-    for fam_label in format_family_labels(cv_families):
-        st.success(fam_label)
+            q_lower = q.lower()
+            sub_lower = sub_family.lower()
 
-if skills:
-    st.markdown("### Compétences dominantes estimées")
-    for skill in skills:
-        st.write(f"• {skill}")
+            if sub_lower not in q_lower:
+                enriched_queries.append(f"{q} {sub_family}")
 
-if uploaded:
+        search_queries = dedupe_keep_order(enriched_queries)[:5]
+        st.session_state["generated_queries"] = search_queries
+
+    # ------------------------
+    # AFFICHAGE UI — ordre logique unique
+    # ------------------------
+    st.success(f"CV importé — {len(cv_text)} caractères")
+
+    with st.expander("Voir le texte extrait"):
+        st.write(cv_text)
+
+    st.markdown("### Thèmes dominants détectés dans votre CV")
+    if topics:
+        cols = st.columns(4)
+        for i, t in enumerate(topics[:8]):
+            cols[i % 4].info(t)
+    else:
+        st.write("Aucun thème dominant détecté.")
+
+    if skills:
+        st.markdown("### Compétences dominantes estimées")
+        for skill in skills:
+            st.write(f"• {skill}")
+
+    secondary_labels = [display_family_label(f) for f in secondary_families]
+    if secondary_labels:
+        st.write("Ton CV montre aussi des éléments en :")
+        for label in secondary_labels:
+            st.write(f"- {label}")
+
+    st.write(
+        "Cette lecture signifie surtout que ton CV présente un axe principal, "
+        "mais aussi plusieurs compétences secondaires utiles selon le poste visé."
+    )
+
+    if cv_families:
+        st.markdown("### Familles métier dominantes détectées")
+        for fam_label in format_family_labels(cv_families):
+            st.success(fam_label)
+
+    st.markdown("### Lecture de ton profil")
+    st.write(
+        f"Dominante détectée automatiquement : "
+        f"**{display_family_label(main_family)}**"
+    )
+
+    if has_user_override:
+        st.write(
+            f"Réorientation choisie : "
+            f"**{display_family_label(selected_family)}**"
+        )
+    else:
+        st.write("Aucune réorientation choisie pour l’instant.")
+
+    if detected_families:
+        st.markdown("### Si cette dominante ne te convient pas, choisis une autre direction")
+        st.caption(
+            "Hephaistos te propose une direction principale, "
+            "mais tu peux l’ajuster selon ton objectif."
+        )
+
+        family_cols = st.columns(len(detected_families))
+        for i, family in enumerate(detected_families):
+            with family_cols[i]:
+                if st.button(
+                    display_family_label(family),
+                    key=f"family_btn_{family}_{i}"
+                ):
+                    st.session_state["selected_family"] = family
+
+    # recalcul après clic possible
+    selected_family = st.session_state.get("selected_family")
+    if selected_family == main_family:
+        st.session_state["selected_family"] = None
+        selected_family = None
+
+    has_user_override = selected_family is not None
+    direction_family = selected_family if has_user_override else main_family
+    sub_family = infer_sub_family(topics, direction_family)
+
+    if has_user_override:
+        st.write(
+            f"Direction retenue pour l’analyse : "
+            f"**{display_family_label(direction_family)}**"
+        )
+    else:
+        st.write(
+            f"Analyse actuellement basée sur la dominante détectée : "
+            f"**{display_family_label(main_family)}**"
+        )
+
     st.markdown("### Analyse métier du CV")
     st.write(f"Métier principal estimé : {main_job_label}")
     st.write(f"Domaine : {domain_label}")
+    st.write(f"Sous-famille détectée : **{sub_family}**")
 
     secondary_family = cv_families[1] if len(cv_families) > 1 else None
     if secondary_family:
         st.write(
             "Profil secondaire détecté : "
-            f"{FAMILY_LABELS.get(secondary_family, secondary_family.replace('_', ' ').title())}"
+            f"{display_family_label(secondary_family)}"
         )
 
     if related_jobs:
@@ -679,7 +847,7 @@ if uploaded:
                 st.write(f"• {job.get('job', 'inconnu')}")
             else:
                 st.write(f"• {job}")
-
+ 
 
 # =========================================================
 # 2) PHASE 1 — TROUVER DES OFFRES
@@ -847,6 +1015,36 @@ if st.button("Rechercher et classer"):
                         adjusted_score += 6
                     elif kw in description_lower:
                         adjusted_score += 3
+                                 # Bonus sous-famille
+                sub_family_lower = sub_family.lower() if sub_family else ""
+
+                if sub_family_lower and sub_family_lower != "généraliste":
+                    if sub_family_lower in title_text:
+                        adjusted_score += 8
+                    elif sub_family_lower in description_lower:
+                        adjusted_score += 5
+                    else:
+                        sub_family_signals = {
+                            "traitement de données": ["saisie", "excel", "données", "data", "base de données", "immatriculation"],
+                            "accueil & secrétariat": ["accueil", "standard", "téléphone", "secrétariat", "courrier"],
+                            "gestion comptable": ["compta", "comptable", "facturation", "paiement", "écriture"],
+                            "support administratif": ["administratif", "classement", "dossier", "gestion"],
+                            "communication digitale": ["réseaux sociaux", "social media", "community", "digital"],
+                            "création de contenu": ["contenu", "rédaction", "éditorial", "newsletter"],
+                            "opérations logistiques": ["logistique", "flux", "préparation", "expédition"],
+                            "gestion de stock": ["stock", "inventaire", "magasin", "réception"],
+                        }
+
+                        signals = sub_family_signals.get(sub_family_lower, [])
+                        signal_hits = sum(
+                            1 for signal in signals
+                            if signal in title_text or signal in description_lower
+                        )
+
+                        if signal_hits >= 2:
+                            adjusted_score += 5
+                        elif signal_hits == 1:
+                            adjusted_score += 2       
 
                 title_has_signal = False
 
