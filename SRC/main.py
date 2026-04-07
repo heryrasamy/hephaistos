@@ -6,13 +6,14 @@ from typing import List
 import streamlit as st
 
 from cv_extract import extract_text_from_upload
-from matching_simple import score_cv_offer, STOPWORDS,get_top_cv_families
+from matching_simple import score_cv_offer, STOPWORDS, extract_terms
 from job_inference import (
     build_job_inference_summary,
     build_search_queries_from_job_summary,
     get_top_cv_families,
 )
 from offers_phase1 import fetch_offers_multi_queries
+from opportunity_rules import build_realistic_opportunity_summary
 from location_helper import filter_communes, format_commune_label
 from francetravail_api import search_communes, get_access_token
 
@@ -33,6 +34,9 @@ if "offers_scored" not in st.session_state:
 
 if "generated_queries" not in st.session_state:
     st.session_state["generated_queries"] = []
+
+if "selected_family" not in st.session_state:
+    st.session_state["selected_family"] = None   
 
 if "keywords_input" not in st.session_state:
     st.session_state["keywords_input"] = ""
@@ -760,6 +764,30 @@ if uploaded:
         st.markdown("### Compétences dominantes estimées")
         for skill in skills:
             st.write(f"• {skill}")
+    # =====================================================
+# Choix de direction métier (utilisateur)
+# =====================================================
+    if cv_families:
+        st.markdown("### Choisir une direction métier")
+
+    detected_family = cv_families[0] if cv_families else None
+    current_selected_family = st.session_state.get("selected_family")
+
+    if current_selected_family in cv_families:
+        selected_index = cv_families.index(current_selected_family)
+    else:
+        selected_index = 0
+
+    selected_family = st.selectbox(
+        "Tu peux garder la direction proposée ou en choisir une autre :",
+        options=cv_families,
+        index=selected_index,
+    )
+
+    st.session_state["selected_family"] = selected_family
+
+    st.caption(f"Dominante détectée dans le CV : {detected_family}")
+    st.caption(f"Direction actuellement choisie : {selected_family}")       
 
     secondary_labels = [display_family_label(f) for f in secondary_families]
     if secondary_labels:
@@ -777,8 +805,8 @@ if uploaded:
         for fam_label in format_family_labels(cv_families):
             st.success(fam_label)
 
-    st.markdown("### Lecture de ton profil")
-    st.write(
+        st.markdown("### Lecture de ton profil")
+        st.write(
         f"Dominante détectée automatiquement : "
         f"**{display_family_label(main_family)}**"
     )
@@ -894,10 +922,7 @@ if location_query.strip():
     except Exception as e:
         st.error(f"Erreur référentiel communes : {e}")
 
-if generated_queries:
-    st.markdown("### Requêtes suggérées à partir du CV")
-    for q in generated_queries:
-        st.write(f"• {q}")
+
 
 keywords = st.text_input(
     "Mots-clés (séparés par virgules)",
@@ -923,10 +948,15 @@ if st.button("Rechercher et classer"):
         }
 
         if selected_commune:
-            base_params["commune"] = selected_commune["code"]
-            base_params["distance"] = rayon_km
+                    base_params["commune"] = selected_commune["code"]
+                    base_params["distance"] = rayon_km
 
         queries = []
+
+        selected_family = st.session_state.get("selected_family")
+
+        if selected_family:
+            queries.append(selected_family)
 
         if keywords.strip():
             manual_keywords = [k.strip() for k in keywords.split(",") if k.strip()]
@@ -937,6 +967,7 @@ if st.button("Rechercher et classer"):
                 queries.append(q)
 
         queries = dedupe_keep_order(queries)
+        st.session_state["last_search_queries"] = queries
 
         if not queries:
             st.warning("Aucune requête de recherche disponible.")
@@ -962,15 +993,32 @@ if st.button("Rechercher et classer"):
                     description
                 )
 
+                offer_title = to_text(o.get("title", ""))
+                offer_description = description
+
+                score_value = int(result.get("score", 0) or 0)
+                matched_terms = result.get("matched_terms", []) or []
+                missing_terms = result.get("missing_terms", []) or []
+
+                realistic_summary = build_realistic_opportunity_summary(
+                    score=score_value,
+                    cv_text=to_text(cv_text),
+                    offer_title=offer_title,
+                    offer_text=offer_description,
+                    cv_terms=extract_terms(to_text(cv_text)),
+                    offer_terms=extract_terms(offer_description),
+                )
+
                 offer_families = get_top_cv_families(description)
                 o["offer_families"] = offer_families
 
-                cv_main_family = cv_families[0] if cv_families else None
+                selected_family = st.session_state.get("selected_family")
+                cv_main_family = selected_family if selected_family else (cv_families[0] if cv_families else None)
                 offer_main_family = offer_families[0] if offer_families else None
 
-                adjusted_score = result["score"]
+                adjusted_score = score_value
 
-                title_text = to_text(o.get("title", "")).lower()
+                title_text = offer_title.lower()
                 description_lower = description.lower()
 
                 if cv_main_family and offer_main_family and cv_main_family == offer_main_family:
@@ -1015,7 +1063,8 @@ if st.button("Rechercher et classer"):
                         adjusted_score += 6
                     elif kw in description_lower:
                         adjusted_score += 3
-                                 # Bonus sous-famille
+
+                # Bonus sous-famille
                 sub_family_lower = sub_family.lower() if sub_family else ""
 
                 if sub_family_lower and sub_family_lower != "généraliste":
@@ -1044,7 +1093,7 @@ if st.button("Rechercher et classer"):
                         if signal_hits >= 2:
                             adjusted_score += 5
                         elif signal_hits == 1:
-                            adjusted_score += 2       
+                            adjusted_score += 2
 
                 title_has_signal = False
 
@@ -1067,9 +1116,10 @@ if st.button("Rechercher et classer"):
                 adjusted_score = max(0, min(100, adjusted_score))
 
                 o["score"] = adjusted_score
-                o["base_score"] = result["score"]
-                o["matched_terms"] = result.get("matched_terms", [])
-                o["missing_terms"] = result.get("missing_terms", [])
+                o["base_score"] = score_value
+                o["matched_terms"] = matched_terms
+                o["missing_terms"] = missing_terms
+                o["realistic_opportunity"] = realistic_summary
 
                 scored.append(o)
 
@@ -1091,20 +1141,42 @@ if offers_scored:
     st.subheader("Top 30 (triées par compatibilité)")
 
     for i, o in enumerate(offers_scored[:30]):
-        title = o.get("title", "Sans titre")
-        company = o.get("company", "")
-        location = o.get("location", "")
-        url = o.get("url", "")
+        title = to_text(o.get("title", "Sans titre"))
+        company = to_text(o.get("company", ""))
+        location = to_text(o.get("location", ""))
+        url = to_text(o.get("url", ""))
         score = o.get("score", 0)
 
+        realistic = o.get("realistic_opportunity", {}) or {}
+        realistic_verdict = realistic.get("verdict", "à étudier")
+        realistic_explanation = realistic.get("explanation", "")
+
         st.write(f"**{score}/100 — {title}**")
-        st.write(f"{company} — {location}")
+        st.caption(f"Opportunité réaliste : {realistic_verdict}")
+
+        if realistic_explanation:
+            st.write(f"Pourquoi : {realistic_explanation}")
+
+        if company:
+            st.write(f"**Entreprise :** {company}")
+
+        if location:
+            st.write(f"**Lieu :** {location}")
 
         if url:
-            st.write(url)
+            st.markdown(f"**Lien pour postuler :** [Ouvrir l'annonce]({url})")
 
-        if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
-            st.session_state["offer_text"] = to_text(o.get("text", ""))
+            if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
+                st.session_state["offer_text"] = to_text(o.get("text", ""))
+                st.session_state["selected_offer_meta"] = {
+                "title": title,
+                "company": company,
+                "location": location,
+                "url": url,
+                "score": o.get("score", 0),
+                "base_score": o.get("base_score", 0),
+                "realistic_opportunity": o.get("realistic_opportunity", {}) or {},
+            }
 
         with st.expander("Voir description", expanded=False):
             st.write(to_text(o.get("text", "Description non disponible")))
@@ -1128,6 +1200,7 @@ st.text_area(
 st.subheader("4) Analyser CV vs Offre")
 
 offer_text = st.session_state.get("offer_text", "")
+selected_offer_meta = st.session_state.get("selected_offer_meta", {}) or {}
 
 if st.button("Analyser CV vs Offre"):
     if not cv_text:
@@ -1151,16 +1224,91 @@ if analysis:
     bonus = analysis.get("bonus", 0)
     family_bonus = analysis.get("family_bonus", 0)
 
-    st.markdown("### Score de compatibilité")
-    st.markdown(f"## {score}/100 — {interpretation}")
+    selected_offer_score = selected_offer_meta.get("score")
+    selected_offer_base_score = selected_offer_meta.get("base_score")
+    selected_realistic = selected_offer_meta.get("realistic_opportunity", {}) or {}
+    selected_realistic_verdict = selected_realistic.get("verdict", "à étudier")
+    selected_realistic_explanation = selected_realistic.get("explanation", "")
 
-    st.caption(
-        f"Score basé sur : "
-        f"{coverage}% de correspondance des termes, "
-        f"+{bonus} bonus expressions, "
-        f"+{family_bonus} bonus cohérence métier"
-    )
+    # Détection simple du niveau du profil
+    cv_lower = to_text(cv_text).lower()
 
+    experience_markers = [
+        "ans", "année", "ans d'expérience", "expérience de",
+        "responsable", "gestion", "pilotage", "encadrement"
+    ]
+
+    junior_markers = [
+        "stage", "alternance", "débutant", "junior"
+    ]
+
+    if any(word in cv_lower for word in junior_markers):
+        profile_level = "junior"
+    elif any(word in cv_lower for word in experience_markers):
+        profile_level = "experienced"
+    else:
+        profile_level = "intermediate"
+
+    st.markdown("### Comprendre cette offre")
+
+    if selected_offer_score is not None:
+        st.markdown(f"**Cette offre semble globalement adaptée : {selected_offer_score}/100**")
+
+    st.markdown(f"**Ce que ton CV montre dans cette annonce : {score}/100 — {interpretation}**")
+
+    if selected_offer_score is not None:
+        st.caption(
+            "Cette offre remonte parce qu’elle semble cohérente avec ton profil et ta direction métier. "
+            "Le score ci-dessous regarde plus strictement ce qui apparaît réellement dans ton CV par rapport à l’annonce."
+        )
+
+    if selected_offer_base_score is not None:
+        st.caption(f"Score de départ avant ajustements métier : {selected_offer_base_score}/100")
+
+    if selected_realistic_verdict:
+        st.write(f"Conseil de positionnement : {selected_realistic_verdict}")
+
+    if selected_realistic_explanation:
+        st.write(f"Pourquoi : {selected_realistic_explanation}")
+
+    st.markdown("### Conseil rapide")
+    selected_family = st.session_state.get("selected_family")
+
+    positioning_advice = selected_realistic_verdict
+
+    direction_text = f"dans la direction \"{selected_family}\"" if selected_family else "par rapport à ton profil"
+
+    if positioning_advice in ["très réaliste", "réaliste"]:
+        st.success(f" Tu peux postuler : {direction_text}, cette offre est cohérente.")
+
+    elif positioning_advice in ["accessible"]:
+        st.info(f" Tu peux tenter ta chance : {direction_text}, ton profil reste crédible avec un CV ajusté.")
+
+    elif positioning_advice in ["exploratoire"]:
+        st.warning(f" Cette piste peut se tenter : {direction_text}, il manque encore des éléments visibles dans ton CV.")
+
+    elif positioning_advice in ["possible avec réserve"]:
+        st.warning(f" Cette offre peut se tenter : {direction_text}, mais un point concret peut freiner ta candidature.")
+
+    else:
+        st.error(f" {direction_text.capitalize()}, cette offre paraît encore trop éloignée.")
+
+        st.markdown("#### Ce que ça veut dire concrètement")
+
+    if positioning_advice in ["très réaliste", "réaliste"]:
+        st.write(f"{direction_text.capitalize()}, ton profil correspond bien à ce type de poste. Les recruteurs devraient comprendre rapidement ta candidature.")
+
+    elif positioning_advice in ["accessible"]:
+        st.write(f"{direction_text.capitalize()}, tu n’as pas tous les éléments, mais ton profil reste cohérent avec l’offre.")
+
+    elif positioning_advice in ["exploratoire"]:
+        st.write(f"{direction_text.capitalize()}, ton profil s’en rapproche, mais l’annonce attend des éléments peu visibles dans ton CV.")
+
+    elif positioning_advice in ["possible avec réserve"]:
+        st.write(f"{direction_text.capitalize()}, un point concret peut poser problème (mobilité, expérience, compétences spécifiques).")
+    else:
+                    st.write(f"{direction_text.capitalize()}, l’offre reste encore trop éloignée de ton profil actuel.")
+                    
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1194,10 +1342,46 @@ if analysis:
                 st.markdown(f"**{label}**")
 
                 if source_terms:
-                    st.caption("Termes repérés : " + ", ".join(source_terms[:5]))
+                    st.caption("Repéré dans l’annonce : " + ", ".join(source_terms[:5]))
+
+                suggestion_text = ""
+                label_lower = label.lower()
+
+                if "relation" in label_lower:
+                    if profile_level == "junior":
+                        suggestion_text = "Accueil des clients lors de stages ou missions, gestion des demandes simples"
+                    elif profile_level == "experienced":
+                        suggestion_text = "Gestion de la relation client, suivi des demandes et amélioration de la satisfaction"
+                    else:
+                        suggestion_text = "Accueil des clients, traitement des demandes et suivi des dossiers"
+
+                elif "bureautique" in label_lower:
+                    if profile_level == "junior":
+                        suggestion_text = "Utilisation basique de Word et Excel pour saisir et organiser des données"
+                    elif profile_level == "experienced":
+                        suggestion_text = "Maîtrise avancée des outils bureautiques (Excel, reporting, tableaux de suivi)"
+                    else:
+                        suggestion_text = "Utilisation de Word, Excel et outils bureautiques pour le suivi et la gestion des données"
+
+                elif "analyse" in label_lower or "suivi" in label_lower:
+                    if profile_level == "junior":
+                        suggestion_text = "Participation au suivi d’activité et mise à jour de tableaux simples"
+                    elif profile_level == "experienced":
+                        suggestion_text = "Analyse de données, suivi de performance et reporting régulier"
+                    else:
+                        suggestion_text = "Suivi d’activité, mise à jour de tableaux Excel et reporting simple"
+
+                elif "qualité" in label_lower or "conformité" in label_lower:
+                    suggestion_text = "Contrôle de conformité, respect des procédures et suivi de la qualité"
+
+                elif "organisation" in label_lower or "coordination" in label_lower or "planning" in label_lower:
+                    suggestion_text = "Organisation des tâches, coordination d’activités et suivi de planning"
+
+                if suggestion_text:
+                    st.success(f"À ajouter dans ton CV : {suggestion_text}")
 
                 if advice:
-                    st.write(advice)
+                    st.write(f"Conseil : {advice}")
 
                 st.write("")
         else:
@@ -1209,26 +1393,53 @@ if analysis:
         st.write(f"Bonus expressions : +{bonus}")
         st.write(f"Bonus familles : +{family_bonus}")
 
-        st.markdown("#### Mots trouvés (brut)")
-        raw_matched_terms = analysis.get("matched_terms", [])
+        if st.checkbox("Afficher les détails techniques avancés", key="debug_terms_checkbox"):
+            st.markdown("#### Mots trouvés (brut)")
+            raw_matched_terms = analysis.get("matched_terms", [])
 
-        if raw_matched_terms:
-            for term in raw_matched_terms:
-                st.write(f"- {term}")
-        else:
-            st.write("Aucun mot trouvé.")
+            if raw_matched_terms:
+                for term in raw_matched_terms:
+                    st.write(f"- {term}")
+            else:
+                st.write("Aucun mot trouvé.")
 
-        st.markdown("#### Mots absents (brut)")
-        raw_missing_terms = analysis.get("missing_terms", [])
+            st.markdown("#### Mots absents (brut)")
+            raw_missing_terms = analysis.get("missing_terms", [])
 
-        if raw_missing_terms:
-            for term in raw_missing_terms:
-                st.write(f"- {term}")
-        else:
-            st.write("Aucun mot absent.")
+            if raw_missing_terms:
+                for term in raw_missing_terms:
+                    st.write(f"- {term}")
+            else:
+                st.write("Aucun mot absent.")
 
     st.markdown("### Mots forts")
-    strong_terms = prepare_display_terms(analysis.get("matched_terms", []), max_items=8)
+
+    raw_strong_terms = prepare_display_terms(analysis.get("matched_terms", []), max_items=40)
+
+    banned_terms = {
+        "direction", "entreprise", "niveau", "mettre", "jour", "avant", "possible",
+        "vendredi", "lundi", "heures", "travail", "action", "missions", "seront",
+        "gestion", "suivi", "organisation", "communication"
+    }
+
+    strong_terms = []
+    for term in raw_strong_terms:
+        term_clean = term.strip().lower()
+
+        if not term_clean:
+            continue
+        if term_clean in banned_terms:
+            continue
+        if len(term_clean) < 4:
+            continue
+        if any(char.isdigit() for char in term_clean):
+            continue
+        if len(term_clean.split()) > 3:
+            continue
+
+        strong_terms.append(term)
+
+    strong_terms = strong_terms[:8]
 
     if strong_terms:
         st.write(", ".join(strong_terms))
