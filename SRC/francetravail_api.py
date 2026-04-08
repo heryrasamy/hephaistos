@@ -5,14 +5,12 @@ import time
 # =========================================================
 # CONFIG — À PERSONNALISER AVEC TES IDENTIFIANTS
 # =========================================================
-CLIENT_ID = "PAR_hephaistos_f07261c0287f59a7738be08a57c97fda5d464d9b3bc27bedc606e5e688039d2a"
-CLIENT_SECRET = "6ea9f5fb153c5260df07adfb943bbe42adc67a131ae2ef38671d21092c06a75e"
-
+CLIENT_ID = "PAR_hephaistos_3bd60d2f44612d22fe8311e8d1f471c1a37bfaa339eb135d3d53f3f80788638f"
+CLIENT_SECRET = "5feb8e627ede7d9d42200c0480aeaca18c9ec484c728f4b32c2dc6cddebeea23"
 TOKEN_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
 OFFERS_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 COMMUNES_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/referentiel/communes"
 SCOPE = "o2dsoffre api_offresdemploiv2"
-
 
 
 # =========================================================
