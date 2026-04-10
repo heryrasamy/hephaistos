@@ -53,25 +53,6 @@ if "suggested_keywords" not in st.session_state:
 # =========================================================
 VALID_PUBLIEE_DEPUIS = [1, 3, 7, 14, 30, 60, 90, 180, 365]
 
-FAMILY_LABELS = {
-    "production": "Production & Fabrication",
-    "maintenance": "Maintenance & Réparation",
-    "logistique": "Logistique & Transport",
-    "batiment": "Construction & Bâtiment",
-    "technique_installation": "Technique & Installation",
-    "administratif_gestion": "Administratif & Gestion",
-    "analyse_pilotage": "Analyse & Pilotage",
-    "vente_commerce": "Vente & Commerce",
-    "relation_client_accueil": "Relation Client & Accueil",
-    "communication_marketing": "Communication & Marketing",
-    "pedagogie_formation": "Pédagogie & Formation",
-    "sante_soin": "Santé & Soin",
-    "social_accompagnement": "Social & Accompagnement",
-    "securite_protection": "Sécurité & Protection",
-    "creation_artistique": "Création & Artistique",
-    "hotellerie_restauration": "Hôtellerie & Restauration",
-}
-
 GENERIC_TOPIC_TERMS = {
     "professionnel",
     "professionnelle",
@@ -118,6 +99,17 @@ FAMILY_LABELS = {
     "commerce_vente": "Commerce & Vente",
     "batiment_travaux": "Bâtiment & Travaux",
     "securite": "Sécurité",
+    "production": "Production & Fabrication",
+    "maintenance": "Maintenance & Réparation",
+    "logistique": "Logistique & Transport",
+    "batiment": "Construction & Bâtiment",
+    "technique_installation": "Technique & Installation",
+    "analyse_pilotage": "Analyse & Pilotage",
+    "pedagogie_formation": "Pédagogie & Formation",
+    "social_accompagnement": "Social & Accompagnement",
+    "securite_protection": "Sécurité & Protection",
+    "creation_artistique": "Création & Artistique",
+    "hotellerie_restauration": "Hôtellerie & Restauration",
 }
 
 
@@ -148,17 +140,14 @@ def _strip_accents_local(s: str) -> str:
 def _normalize_local(text: str) -> str:
     text = (text or "").lower()
     text = _strip_accents_local(text)
-    text = re.sub(r"[/|\\,_;:()\[\]{}]+", " ", text)
-    text = re.sub(r"[-'’]+", " ", text)
-    text = re.sub(r"[^a-z0-9\s]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"[/|\\,_;:()\[\]{}]+", "", text)
+    text = re.sub(r"[-'']+", "", text)
+    text = re.sub(r"[^a-z0-9\\s]+", " ", text)
+    text = re.sub(r"\\s+", " ", text).strip()
     return text
 
 
 def remove_redundant_terms(terms: list[str]) -> list[str]:
-    """
-    Supprime les termes inclus dans des termes plus longs.
-    """
     terms_sorted = sorted(terms, key=lambda x: len(x), reverse=True)
     result = []
 
@@ -205,34 +194,24 @@ def is_clean_term(term: str) -> bool:
 
 
 def prepare_display_terms(terms: list[str], max_items: int = 8) -> list[str]:
-    """
-    Prépare une liste de termes pour affichage utilisateur.
-    """
     cleaned = [t for t in terms if is_clean_term(t)]
     reduced = remove_redundant_terms(cleaned)
     return reduced[:max_items]
 
 
 def interpret_score(score: int) -> str:
-    """
-    Donne une interprétation simple du score.
-    """
     if score < 40:
         return "Correspondance faible"
-    elif score < 60:
+    if score < 60:
         return "Correspondance partielle"
-    elif score < 80:
+    if score < 80:
         return "Bonne correspondance"
-    else:
-        return "Très bonne correspondance"
+    return "Très bonne correspondance"
 
 
 def build_cv_suggestions_from_competencies(
     missing_competencies: list[dict],
 ) -> list[str]:
-    """
-    Génère des suggestions CV à partir des compétences manquantes interprétées.
-    """
     suggestions = []
 
     for comp in missing_competencies:
@@ -244,58 +223,52 @@ def build_cv_suggestions_from_competencies(
 
         if concept == "organisation_coordination":
             suggestions.append(
-                "Ajoute ou reformule une expérience montrant la planification, la coordination ou le suivi d'activités."
+                "Ajoute ou reformule une expérience montrant la planification,"
+                " la coordination ou le suivi d'activités."
             )
-
         elif concept == "suivi_analyse_donnees":
             suggestions.append(
                 "Mets en avant l’utilisation d’outils comme Excel,"
-                "reporting ou tableaux de bord"
-                "avec des exemples concrets."
+                " reporting ou tableaux de bord avec des exemples concrets."
             )
-
         elif concept == "management":
             suggestions.append(
-                "Si tu as encadré ou coordonné des personnes, "
-                "mentionne-le explicitement avec des résultats ou responsabilités."
+                "Si tu as encadré ou coordonné des personnes,"
+                " mentionne-le explicitement avec des résultats ou responsabilités."
             )
-
         elif concept == "relation_client":
             suggestions.append(
-                "Ajoute des exemples concrets de relation client : accueil, conseil, suivi ou gestion de demandes."
+                "Ajoute des exemples concrets de relation client :"
+                " accueil, conseil, suivi ou gestion de demandes."
             )
-
         elif concept == "communication":
             suggestions.append(
-                "Décris précisément tes actions de communication : "
-                "contenus créés, réseaux utilisés, objectifs atteints."
+                "Décris précisément tes actions de communication :"
+                " contenus créés, réseaux utilisés, objectifs atteints."
             )
-
         elif concept == "outils_bureautiques":
             suggestions.append(
-                "Précise les outils bureautiques maîtrisés (Word, Excel, PowerPoint) et leur usage concret."
+                "Précise les outils bureautiques maîtrisés (Word, Excel, PowerPoint)"
+                " et leur usage concret."
             )
-
         elif concept == "outils_techniques":
             suggestions.append(
                 "Indique clairement les outils ou technologies utilisés ainsi que ton niveau de maîtrise."
             )
-
         elif concept == "logistique_stock":
             suggestions.append(
-                "Ajoute des expériences liées à la gestion de stock, réception, inventaire ou flux logistiques."
+                "Ajoute des expériences liées à la gestion de stock, réception,"
+                " inventaire ou flux logistiques."
             )
-
         elif concept == "qualite_conformite":
             suggestions.append(
                 "Mentionne les procédures, contrôles qualité ou normes que tu as appliqués."
             )
-
         elif concept == "soft_skills":
             suggestions.append(
-                "Ajoute un exemple concret illustrant ta rigueur, ton autonomie ou ton travail en équipe."
+                "Ajoute un exemple concret illustrant ta rigueur, ton autonomie"
+                " ou ton travail en équipe."
             )
-
         else:
             if advice:
                 suggestions.append(advice)
@@ -748,11 +721,11 @@ def topics_to_skills(topics: List[str]) -> List[str]:
     unique_skills = []
     seen = set()
 
-    for s in skills:
-        key = s.lower()
+    for skill in skills:
+        key = skill.lower()
         if key not in seen:
             seen.add(key)
-            unique_skills.append(s)
+            unique_skills.append(skill)
 
     return unique_skills[:8]
 
@@ -760,7 +733,6 @@ def topics_to_skills(topics: List[str]) -> List[str]:
 def infer_sub_family(topics, main_family):
     topics_joined = " ".join(topics).lower()
 
-    # ADMINISTRATIF
     if main_family == "administratif_gestion":
         if any(word in topics_joined for word in ["saisie", "donnee", "excel"]):
             return "Traitement de données"
@@ -770,7 +742,6 @@ def infer_sub_family(topics, main_family):
             return "Gestion comptable"
         return "Support administratif"
 
-    # COMMUNICATION
     if main_family == "communication_marketing":
         if "reseaux sociaux" in topics_joined:
             return "Communication digitale"
@@ -778,8 +749,7 @@ def infer_sub_family(topics, main_family):
             return "Création de contenu"
         return "Communication générale"
 
-    # LOGISTIQUE
-    if main_family == "production_logistique":
+    if main_family in {"production_logistique", "logistique", "production"}:
         if "stock" in topics_joined:
             return "Gestion de stock"
         return "Opérations logistiques"
@@ -790,7 +760,6 @@ def infer_sub_family(topics, main_family):
 def display_family_label(family):
     if not family:
         return "Inconnu"
-
     return FAMILY_LABELS.get(family, family.replace("_", " ").capitalize())
 
 
@@ -821,12 +790,16 @@ cv_families = get_top_cv_families(cv_text, top_n=3)
 main_family = cv_families[0] if cv_families else "inconnu"
 
 selected_family = st.session_state.get("selected_family")
-
 if selected_family == main_family:
     st.session_state["selected_family"] = None
     selected_family = None
+
 has_user_override = selected_family is not None
 direction_family = selected_family if has_user_override else main_family
+final_family_direction = direction_family
+secondary_families = []
+detected_families = []
+sub_family = "Généraliste"
 
 if uploaded:
     uploaded.seek(0)
@@ -838,9 +811,6 @@ if uploaded:
 
     cv_text = to_text(extract_text_from_upload(uploaded.name, file_bytes))
 
-    # ------------------------
-    # Reset seulement si nouveau fichier
-    # ------------------------
     if (
         "last_uploaded_name" not in st.session_state
         or st.session_state["last_uploaded_name"] != uploaded.name
@@ -848,38 +818,32 @@ if uploaded:
         st.session_state["selected_family"] = None
         st.session_state["last_uploaded_name"] = uploaded.name
 
-    # ------------------------
-    # Base familles / direction
-    # ------------------------
     cv_families = get_top_cv_families(cv_text, top_n=3)
     main_family = cv_families[0] if cv_families else "inconnu"
     secondary_families = cv_families[1:] if len(cv_families) > 1 else []
     detected_families = get_top_cv_families(cv_text, top_n=5)
 
     selected_family = st.session_state.get("selected_family")
-
     if selected_family == main_family:
         st.session_state["selected_family"] = None
         selected_family = None
 
     has_user_override = selected_family is not None
     direction_family = selected_family if has_user_override else main_family
+    final_family_direction = direction_family
 
-    # ------------------------
-    # Extraction thèmes / compétences
-    # ------------------------
     cv_terms_for_inference = cv_text.split()
 
     topics_raw = detect_cv_topics(cv_text)
-    topics = [t for t in topics_raw if not is_generic_topic_term(t)]
+    topics = [topic for topic in topics_raw if not is_generic_topic_term(topic)]
 
     if len(topics) < 3:
         topics = topics_raw[:5]
 
     if len(topics) < 3:
-        for t in topics_raw:
-            if t not in topics:
-                topics.append(t)
+        for topic in topics_raw:
+            if topic not in topics:
+                topics.append(topic)
             if len(topics) >= 5:
                 break
 
@@ -887,11 +851,10 @@ if uploaded:
     skills = topics_to_skills(topics)
     sub_family = infer_sub_family(topics, direction_family)
 
-    # ------------------------
-    # Résumé métier
-    # ------------------------
     job_summary = build_job_inference_summary(
-        detected_families=cv_families, cv_terms=cv_terms_for_inference, top_n=3
+        detected_families=cv_families,
+        cv_terms=cv_terms_for_inference,
+        top_n=3,
     )
 
     main_job_data = job_summary.get("main_job", {})
@@ -904,9 +867,6 @@ if uploaded:
         main_job_label = main_job_data or "inconnu"
         domain_label = job_summary.get("domain", "inconnu")
 
-    # ------------------------
-    # Mots-clés suggérés
-    # ------------------------
     keyword_candidates = []
 
     if sub_family and sub_family != "Généraliste":
@@ -945,31 +905,35 @@ if uploaded:
     st.session_state["keywords_input"] = new_keywords_value
 
     search_queries = build_search_queries_from_job_summary(
-        job_summary=job_summary, topics=topics, max_queries=5
+        job_summary,
+        topics,
+        max_queries=5,
     )
+
+    main_family = cv_families[0] if cv_families else None
+    selected_family = st.session_state.get("selected_family")
+    final_family_direction = selected_family if selected_family else main_family
+
+    if final_family_direction:
+        search_queries = [final_family_direction] + search_queries
+
     st.session_state["generated_queries"] = search_queries
 
-    # ------------------------
-    # Étape 2B.11A — enrichir les requêtes avec la sous-famille
-    # ------------------------
     if sub_family and sub_family != "Généraliste":
         enriched_queries = []
 
-        for q in search_queries:
-            enriched_queries.append(q)
+        for query in search_queries:
+            enriched_queries.append(query)
 
-            q_lower = q.lower()
-            sub_lower = sub_family.lower()
+            query_lower = query.lower()
+            sub_family_lower = sub_family.lower()
 
-            if sub_lower not in q_lower:
-                enriched_queries.append(f"{q} {sub_family}")
+            if sub_family_lower not in query_lower:
+                enriched_queries.append(f"{query} {sub_family}")
 
         search_queries = dedupe_keep_order(enriched_queries)[:5]
         st.session_state["generated_queries"] = search_queries
 
-    # ------------------------
-    # AFFICHAGE UI — ordre logique unique
-    # ------------------------
     st.success(f"CV importé — {len(cv_text)} caractères")
 
     with st.expander("Voir le texte extrait"):
@@ -978,8 +942,8 @@ if uploaded:
     st.markdown("### Thèmes dominants détectés dans votre CV")
     if topics:
         cols = st.columns(4)
-        for i, t in enumerate(topics[:8]):
-            cols[i % 4].info(t)
+        for i, topic in enumerate(topics[:8]):
+            cols[i % 4].info(topic)
     else:
         st.write("Aucun thème dominant détecté.")
 
@@ -987,41 +951,47 @@ if uploaded:
         st.markdown("### Compétences dominantes estimées")
         for skill in skills:
             st.write(f"• {skill}")
-    # =====================================================
-    # Choix de direction métier (utilisateur)
-    # =====================================================
+
     if cv_families:
         st.markdown("### Choisir une direction métier")
 
-    detected_family = cv_families[0] if cv_families else None
-    current_selected_family = st.session_state.get("selected_family")
+    main_family = cv_families[0] if cv_families else None
+    selected_family = st.session_state.get("selected_family")
+    final_family_direction = selected_family if selected_family else main_family
 
-    if current_selected_family in cv_families:
-        selected_index = cv_families.index(current_selected_family)
-    else:
-        selected_index = 0
+    direction_options = dedupe_keep_order(cv_families + detected_families)
 
-    selected_family = st.selectbox(
-        "Tu peux garder la direction proposée ou en choisir une autre :",
-        options=cv_families,
-        index=selected_index,
-    )
+    if direction_options:
+        if selected_family in direction_options:
+            selected_index = direction_options.index(selected_family)
+        else:
+            selected_index = 0
 
-    st.session_state["selected_family"] = selected_family
+        selected_family = st.selectbox(
+            "Tu peux garder la direction proposée ou en choisir une autre :",
+            options=direction_options,
+            index=selected_index,
+        )
 
-    st.caption(f"Dominante détectée dans le CV : {detected_family}")
-    st.caption(f"Direction actuellement choisie : {selected_family}")
+        st.session_state["selected_family"] = selected_family
 
-    secondary_labels = [display_family_label(f) for f in secondary_families]
+    current_family = st.session_state.get("selected_family") or main_family
+
+    st.caption(f"Dominante détectée dans le CV : {display_family_label(main_family)}")
+
+    st.caption(f"Direction actuellement choisie : {display_family_label(current_family)}")
+
+    secondary_labels = [display_family_label(family) for family in secondary_families]
     if secondary_labels:
         st.write("Ton CV montre aussi des éléments en :")
         for label in secondary_labels:
             st.write(f"- {label}")
 
     st.write(
-        "Cette lecture signifie surtout que ton CV présente un axe principal, "
-        "mais aussi plusieurs compétences secondaires utiles selon "
-        "le poste visé."
+        "Cette lecture signifie surtout que"
+        " ton CV présente un axe principal, "
+        "mais aussi plusieurs compétences"
+        " secondaires utiles selon le poste visé."
     )
 
     if cv_families:
@@ -1030,36 +1000,44 @@ if uploaded:
             st.success(fam_label)
 
         st.markdown("### Lecture de ton profil")
+
     st.write(
-        f"Dominante détectée automatiquement : "
-        f"**{display_family_label(main_family)}**"
+        f"Dominante détectée automatiquement : **{display_family_label(main_family)}**"
     )
+
+    selected_family = st.session_state.get("selected_family")
+    has_user_override = selected_family is not None and selected_family != main_family
 
     if has_user_override:
         st.write(
-            f"Réorientation choisie : " f"**{display_family_label(selected_family)}**"
+            f"Réorientation choisie : **{display_family_label(selected_family)}**"
+        )
+        st.info(
+            "Tu explores une nouvelle direction."
+            " Les résultats sont orientés par ton objectif,"
+            " tout en restant cohérents avec ton profil."
         )
     else:
         st.write("Aucune réorientation choisie pour l’instant.")
 
     if detected_families:
         st.markdown(
-            "### Si cette dominante ne te convient pas, " "choisis une autre direction"
+            "### Hephaistos détecte une direction principale,"
+            " mais tu peux aussi explorer d’autres orientations réalistes"
         )
         st.caption(
-            "Hephaistos te propose une direction principale, "
-            "mais tu peux l’ajuster selon ton objectif."
+            "La direction choisie guide la recherche. Ton CV sert ensuite de filtre de réalité."
         )
 
         family_cols = st.columns(len(detected_families))
         for i, family in enumerate(detected_families):
             with family_cols[i]:
                 if st.button(
-                    display_family_label(family), key=f"family_btn_{family}_{i}"
+                    display_family_label(family),
+                    key=f"family_btn_{family}_{i}",
                 ):
                     st.session_state["selected_family"] = family
 
-    # recalcul après clic possible
     selected_family = st.session_state.get("selected_family")
     if selected_family == main_family:
         st.session_state["selected_family"] = None
@@ -1067,28 +1045,28 @@ if uploaded:
 
     has_user_override = selected_family is not None
     direction_family = selected_family if has_user_override else main_family
+    final_family_direction = direction_family
     sub_family = infer_sub_family(topics, direction_family)
 
     if has_user_override:
         st.write(
-            f"Direction retenue pour l’analyse : "
-            f"**{display_family_label(direction_family)}**"
+            f"Direction retenue pour l’analyse : **{display_family_label(direction_family)}**"
         )
     else:
         st.write(
-            f"Analyse actuellement basée sur la dominante détectée : "
-            f"**{display_family_label(main_family)}**"
+            f"Analyse actuellement basée sur la dominante détectée : **{display_family_label(main_family)}**"
         )
 
-    st.markdown("### Analyse métier du CV")
-    st.write(f"Métier principal estimé : {main_job_label}")
-    st.write(f"Domaine : {domain_label}")
-    st.write(f"Sous-famille détectée : **{sub_family}**")
+    st.markdown("### Analyse de trajectoire")
+    st.write(f"Direction choisie : **{display_family_label(direction_family)}**")
+    st.write(f"Ce que le CV apporte déjà : {main_job_label}")
+    st.write(f"Domaine détecté : {domain_label}")
+    st.write(f"Ce qui structure encore le profil : **{sub_family}**")
 
     secondary_family = cv_families[1] if len(cv_families) > 1 else None
     if secondary_family:
         st.write(
-            "Profil secondaire détecté : " f"{display_family_label(secondary_family)}"
+            f"Profil secondaire détecté : {display_family_label(secondary_family)}"
         )
 
     if related_jobs:
@@ -1135,8 +1113,7 @@ if location_query.strip():
             )
 
             st.caption(
-                f"Commune sélectionnée : {selected_commune['libelle']} | "
-                f"CP {selected_commune['codePostal']}"
+                f"Commune sélectionnée : {selected_commune['libelle']} | CP {selected_commune['codePostal']}"
             )
         else:
             st.warning("Aucune commune trouvée pour cette saisie.")
@@ -1165,19 +1142,52 @@ if st.button("Rechercher et classer"):
             base_params["distance"] = rayon_km
 
         queries = []
-
         selected_family = st.session_state.get("selected_family")
+        cv_main_family_for_mode = cv_families[0] if cv_families else None
+
+        family_seed_queries = {
+            "Production": [
+                "agent de production",
+                "responsable de production",
+                "technicien de production",
+            ],
+            "Maintenance": [
+                "technicien de maintenance",
+                "agent de maintenance",
+                "maintenance industrielle",
+            ],
+            "Administratif & Gestion": [
+                "assistant administratif",
+                "gestionnaire administratif",
+                "assistant de gestion",
+            ],
+            "Communication & Marketing": [
+                "chargé de communication",
+                "assistant communication",
+                "community manager",
+            ],
+            "Analyse pilotage": [
+                "assistant contrôle de gestion",
+                "chargé d'études",
+                "analyste de données",
+            ],
+        }
 
         if selected_family:
-            queries.append(selected_family)
+            selected_family_queries = family_seed_queries.get(
+                selected_family,
+                [selected_family],
+            )
+            queries.extend(selected_family_queries)
 
         if keywords.strip():
             manual_keywords = [k.strip() for k in keywords.split(",") if k.strip()]
             queries.extend(manual_keywords)
 
-        for q in st.session_state.get("generated_queries", []):
-            if q not in queries:
-                queries.append(q)
+        if not selected_family:
+            for query in st.session_state.get("generated_queries", []):
+                if query not in queries:
+                    queries.append(query)
 
         queries = dedupe_keep_order(queries)
         st.session_state["last_search_queries"] = queries
@@ -1193,217 +1203,343 @@ if st.button("Rechercher et classer"):
 
             st.write(f"Offres récupérées : {len(offers_raw)}")
 
-            scored = []
+            direction_offer_filters = {
+                "Production": [
+                    "production",
+                    "ordonnancement",
+                    "lancement",
+                    "fabrication",
+                    "industrie",
+                    "industriel",
+                ],
+                "Maintenance": [
+                    "maintenance",
+                    "technicien de maintenance",
+                    "maintenance industrielle",
+                    "réparation",
+                    "dépannage",
+                ],
+                "Administratif & Gestion": [
+                    "assistant administratif",
+                    "administratif",
+                    "gestionnaire",
+                    "assistant de direction",
+                    "assistant de gestion",
+                    "scolarité",
+                    "gestion",
+                ],
+                "Communication & Marketing": [
+                    "communication",
+                    "marketing",
+                    "community manager",
+                    "réseaux sociaux",
+                    "digital",
+                    "contenu",
+                    "événementiel",
+                    "évènementiel",
+                    "relation presse",
+                ],
+                "Analyse pilotage": [
+                    "contrôle de gestion",
+                    "controle de gestion",
+                    "analyste",
+                    "analyse",
+                    "reporting",
+                    "tableau de bord",
+                    "données",
+                    "donnees",
+                    "pilotage",
+                    "études",
+                    "etudes",
+                ],
+            }
 
-            for o in offers_raw:
-                description = to_text(o.get("text", ""))
+            selected_family = st.session_state.get("selected_family")
+            family_filter_terms = direction_offer_filters.get(selected_family, [])
 
-                if len(description.strip()) < 50:
+            if family_filter_terms:
+                filtered_offers = []
+
+                for offer in offers_raw:
+                    offer_title_text = to_text(offer.get("title", "")).lower()
+                    offer_description_text = to_text(offer.get("text", "")).lower()
+                    offer_search_text = (
+                        f"{offer_title_text} {offer_description_text}"
+                    )
+
+                    if any(term in offer_search_text for term in family_filter_terms):
+                        filtered_offers.append(offer)
+
+                if filtered_offers:
+                    offers_raw = filtered_offers
+                    st.write(
+                        f"Offres après filtrage direction métier : {len(offers_raw)}"
+                    )
+
+        scored = []
+        is_reorientation_mode = (
+            st.session_state.get("selected_family") is not None
+            and st.session_state.get("selected_family") != main_family
+        )
+
+        for offer in offers_raw:
+            description = to_text(offer.get("text", ""))
+
+            if len(description.strip()) < 50:
+                continue
+
+            cv_text_for_scoring = to_text(cv_text)
+
+            if final_family_direction:
+                direction_label = "Direction métier prioritaire :"
+                cv_text_for_scoring = (
+                    f"{cv_text_for_scoring}\n\n"
+                    f"{direction_label} {final_family_direction}"
+                )
+
+            result = score_cv_offer(cv_text_for_scoring, description)
+
+            cv_text_clean = to_text(cv_text)
+            offer_title_clean = to_text(offer.get("title", ""))
+            offer_text_clean = description
+
+            score_value = int(result.get("score", 0) or 0)
+            matched_terms = result.get("matched_terms", []) or []
+            missing_terms = result.get("missing_terms", []) or []
+            cv_terms = extract_terms(cv_text_clean)
+            offer_terms = extract_terms(offer_text_clean)
+
+            realistic_summary = build_realistic_opportunity_summary(
+                score=score_value,
+                cv_text=cv_text_clean,
+                offer_title=offer_title_clean,
+                offer_text=offer_text_clean,
+                cv_terms=cv_terms,
+                offer_terms=offer_terms,
+            )
+
+            offer_families: list[str] = get_top_cv_families(description)
+            offer["offer_families"] = offer_families
+
+            selected_family = st.session_state.get("selected-family")
+            cv_main_family_for_scoring = (
+                selected_family
+                if selected_family
+                else (cv_families[0] if cv_families else None)
+            )
+
+            cv_families_for_scoring = list(cv_families)
+            if selected_family and selected_family not in cv_families_for_scoring:
+                cv_families_for_scoring.insert(0, selected_family)
+
+            offer_main_family = offer_families[0] if offer_families else None
+
+            adjusted_score = score_value
+
+            is_reorientation_mode = False
+            if selected_family and cv_main_family_for_mode:
+                if selected_family != cv_main_family_for_mode:
+                    is_reorientation_mode = True
+
+                if is_reorientation_mode:
+                    adjusted_score = int(score_value * 0.7)
+                if selected_family and offer_main_family:
+                    if selected_family == offer_main_family:
+                        adjusted_score += 20
+                    elif offer_main_family in cv_families_for_scoring[:3]:
+                        adjusted_score += 10
+
+            title_text = offer_title_clean.lower()
+            description_lower = offer_text_clean.lower()
+
+            if (
+                cv_main_family_for_scoring
+                and offer_main_family
+                and cv_main_family_for_scoring == offer_main_family
+            ):
+                adjusted_score += 12
+            elif (
+                offer_main_family
+                and offer_main_family in cv_families_for_scoring[:2]
+            ):
+                adjusted_score += 6
+            elif (
+                cv_main_family_for_scoring
+                and offer_main_family
+                and offer_main_family not in cv_families_for_scoring
+            ):
+                adjusted_score -= 10
+
+            family_overlap = len(
+                set(cv_families_for_scoring[:3]) & set(offer_families[:3])
+            )
+            adjusted_score += family_overlap * 4
+
+            main_job_label_lower = main_job_label.lower()
+            if main_job_label_lower and main_job_label_lower in title_text:
+                adjusted_score += 18
+            elif main_job_label_lower and main_job_label_lower in description_lower:
+                adjusted_score += 12
+
+            for job in related_jobs:
+                if isinstance(job, dict):
+                    related_label = job.get("job", "").lower()
+                else:
+                    related_label = str(job).lower()
+
+                if not related_label:
                     continue
 
-                result = score_cv_offer(to_text(cv_text), description)
-
-                cv_text_clean = to_text(cv_text)
-                offer_title_clean = to_text(o.get("title", ""))
-                offer_text_clean = description
-
-                score_value = int(result.get("score", 0) or 0)
-                matched_terms = result.get("matched_terms", []) or []
-                missing_terms = result.get("missing_terms", []) or []
-                cv_terms = extract_terms(cv_text_clean)
-                offer_terms = extract_terms(offer_text_clean)
-
-                realistic_summary = build_realistic_opportunity_summary(
-                    score=score_value,
-                    cv_text=cv_text_clean,
-                    offer_title=offer_title_clean,
-                    offer_text=offer_text_clean,
-                    cv_terms=cv_terms,
-                    offer_terms=offer_terms,
-                )
-
-                offer_families: List[str] = get_top_cv_families(description)
-                o["offer_families"] = offer_families
-
-                selected_family = st.session_state.get("selected_family")
-                cv_main_family = (
-                    selected_family
-                    if selected_family
-                    else (cv_families[0] if cv_families else None)
-                )
-                offer_main_family = offer_families[0] if offer_families else None
-
-                adjusted_score = score_value
-
-                title_text = offer_title_clean.lower()
-                description_lower = offer_text_clean.lower()
-
-                if (
-                    cv_main_family
-                    and offer_main_family
-                    and cv_main_family == offer_main_family
-                ):
-                    adjusted_score += 12
-                elif offer_main_family and offer_main_family in cv_families[:2]:
+                if related_label in title_text:
+                    adjusted_score += 10
+                elif related_label in description_lower:
                     adjusted_score += 6
-                elif (
-                    cv_main_family
-                    and offer_main_family
-                    and offer_main_family not in cv_families
-                ):
-                    adjusted_score -= 10
 
-                family_overlap = len(set(cv_families[:3]) & set(offer_families[:3]))
-                adjusted_score += family_overlap * 4
+            keyword_values = [
+                keyword.strip().lower()
+                for keyword in st.session_state.get("keywords_input", "").split(",")
+                if keyword.strip()
+            ]
 
-                main_job_label_lower = main_job_label.lower()
+            for keyword in keyword_values:
+                if keyword in title_text:
+                    adjusted_score += 6
+                elif keyword in description_lower:
+                    adjusted_score += 3
 
-                if main_job_label_lower and main_job_label_lower in title_text:
-                    adjusted_score += 18
-                elif main_job_label_lower and main_job_label_lower in description_lower:
-                    adjusted_score += 12
+            sub_family_lower = sub_family.lower() if sub_family else ""
+            if sub_family_lower and sub_family_lower != "généraliste":
+                if sub_family_lower in title_text:
+                    adjusted_score += 8
+                elif sub_family_lower in description_lower:
+                    adjusted_score += 5
+                else:
+                    sub_family_signals = {
+                        "traitement de données": [
+                            "saisie",
+                            "excel",
+                            "données",
+                            "data",
+                            "base de données",
+                            "immatriculation",
+                        ],
+                        "accueil & secrétariat": [
+                            "accueil",
+                            "standard",
+                            "téléphone",
+                            "secrétariat",
+                            "courrier",
+                        ],
+                        "gestion comptable": [
+                            "compta",
+                            "comptable",
+                            "facturation",
+                            "paiement",
+                            "écriture",
+                        ],
+                        "support administratif": [
+                            "administratif",
+                            "classement",
+                            "dossier",
+                            "gestion",
+                        ],
+                        "communication digitale": [
+                            "réseaux sociaux",
+                            "social media",
+                            "community",
+                            "digital",
+                        ],
+                        "création de contenu": [
+                            "contenu",
+                            "rédaction",
+                            "éditorial",
+                            "newsletter",
+                        ],
+                        "opérations logistiques": [
+                            "logistique",
+                            "flux",
+                            "préparation",
+                            "expédition",
+                        ],
+                        "gestion de stock": [
+                            "stock",
+                            "inventaire",
+                            "magasin",
+                            "réception",
+                        ],
+                    }
 
+                    signals = sub_family_signals.get(sub_family_lower, [])
+                    signal_hits = sum(
+                        1
+                        for signal in signals
+                        if signal in title_text or signal in description_lower
+                    )
+
+                    if signal_hits >= 2:
+                        adjusted_score += 5
+                    elif signal_hits == 1:
+                        adjusted_score += 2
+
+            title_has_signal = False
+            if main_job_label_lower and main_job_label_lower in title_text:
+                title_has_signal = True
+            else:
                 for job in related_jobs:
                     if isinstance(job, dict):
                         related_label = job.get("job", "").lower()
                     else:
                         related_label = str(job).lower()
 
-                    if not related_label:
-                        continue
+                    if related_label and related_label in title_text:
+                        title_has_signal = True
+                        break
 
-                    if related_label in title_text:
-                        adjusted_score += 10
-                    elif related_label in description_lower:
-                        adjusted_score += 6
+            if (
+                not title_has_signal
+                and offer_main_family
+                and offer_main_family not in cv_families_for_scoring[:2]
+            ):
+                adjusted_score -= 6
 
-                keyword_values = [
-                    k.strip().lower()
-                    for k in st.session_state.get("keywords_input", "").split(",")
-                    if k.strip()
-                ]
+            adjusted_score = max(0, min(100, adjusted_score))
 
-                for kw in keyword_values:
-                    if kw in title_text:
-                        adjusted_score += 6
-                    elif kw in description_lower:
-                        adjusted_score += 3
+            offer["score"] = adjusted_score
+            offer["base_score"] = score_value
+            offer["matched_terms"] = matched_terms
+            offer["missing_terms"] = missing_terms
+            offer["realistic_opportunity"] = realistic_summary
 
-                # Bonus sous-famille
-                sub_family_lower = sub_family.lower() if sub_family else ""
+            keep_offer = True
+            if is_reorientation_mode:
+                if selected_family and offer_main_family:
+                    if selected_family != offer_main_family:
+                        if offer_main_family not in cv_families_for_scoring[:2]:
+                            keep_offer = False
 
-                if sub_family_lower and sub_family_lower != "généraliste":
-                    if sub_family_lower in title_text:
-                        adjusted_score += 8
-                    elif sub_family_lower in description_lower:
-                        adjusted_score += 5
-                    else:
-                        sub_family_signals = {
-                            "traitement de données": [
-                                "saisie",
-                                "excel",
-                                "données",
-                                "data",
-                                "base de données",
-                                "immatriculation",
-                            ],
-                            "accueil & secrétariat": [
-                                "accueil",
-                                "standard",
-                                "téléphone",
-                                "secrétariat",
-                                "courrier",
-                            ],
-                            "gestion comptable": [
-                                "compta",
-                                "comptable",
-                                "facturation",
-                                "paiement",
-                                "écriture",
-                            ],
-                            "support administratif": [
-                                "administratif",
-                                "classement",
-                                "dossier",
-                                "gestion",
-                            ],
-                            "communication digitale": [
-                                "réseaux sociaux",
-                                "social media",
-                                "community",
-                                "digital",
-                            ],
-                            "création de contenu": [
-                                "contenu",
-                                "rédaction",
-                                "éditorial",
-                                "newsletter",
-                            ],
-                            "opérations logistiques": [
-                                "logistique",
-                                "flux",
-                                "préparation",
-                                "expédition",
-                            ],
-                            "gestion de stock": [
-                                "stock",
-                                "inventaire",
-                                "magasin",
-                                "réception",
-                            ],
-                        }
+                if keep_offer:
+                    has_min_score = adjusted_score >= 35
+                    has_common_terms = len(matched_terms) > 0
+                    has_family_link = (
+                        offer_main_family in cv_families_for_scoring
+                        if offer_main_family
+                        else False
+                    )
 
-                        signals = sub_family_signals.get(sub_family_lower, [])
-                        signal_hits = sum(
-                            1
-                            for signal in signals
-                            if signal in title_text or signal in description_lower
-                        )
+                    if not (
+                        has_min_score or has_common_terms or has_family_link
+                    ):
+                        keep_offer = False
 
-                        if signal_hits >= 2:
-                            adjusted_score += 5
-                        elif signal_hits == 1:
-                            adjusted_score += 2
+            if keep_offer:
+                scored.append(offer)
 
-                title_has_signal = False
-
-                if main_job_label_lower and main_job_label_lower in title_text:
-                    title_has_signal = True
-                else:
-                    for job in related_jobs:
-                        if isinstance(job, dict):
-                            related_label = job.get("job", "").lower()
-                        else:
-                            related_label = str(job).lower()
-
-                        if related_label and related_label in title_text:
-                            title_has_signal = True
-                            break
-
-                if (
-                    not title_has_signal
-                    and offer_main_family
-                    and offer_main_family not in cv_families[:2]
-                ):
-                    adjusted_score -= 6
-
-                adjusted_score = max(0, min(100, adjusted_score))
-
-                o["score"] = adjusted_score
-                o["base_score"] = score_value
-                o["matched_terms"] = matched_terms
-                o["missing_terms"] = missing_terms
-                o["realistic_opportunity"] = realistic_summary
-
-                scored.append(o)
-
-            scored.sort(key=lambda x: x.get("score", 0), reverse=True)
-            scored = scored[:30]
-
-            st.session_state["offers_scored"] = scored
+        scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+        scored = scored[:30]
+        st.session_state["offers_scored"] = scored
 
     except Exception as e:
-        st.error(f"Erreur lors de la recherche d'offres : {e}")
+        st.error(f"erreur lors des recherche d'offres:{e}")
 
 
 # =========================================================
@@ -1414,14 +1550,14 @@ offers_scored = st.session_state.get("offers_scored", [])
 if offers_scored:
     st.subheader("Top 30 (triées par compatibilité)")
 
-    for i, o in enumerate(offers_scored[:30]):
-        title = to_text(o.get("title", "Sans titre"))
-        company = to_text(o.get("company", ""))
-        location = to_text(o.get("location", ""))
-        url = to_text(o.get("url", ""))
-        score = o.get("score", 0)
+    for i, offer in enumerate(offers_scored[:30]):
+        title = to_text(offer.get("title", "Sans titre"))
+        company = to_text(offer.get("company", ""))
+        location = to_text(offer.get("location", ""))
+        url = to_text(offer.get("url", ""))
+        score = offer.get("score", 0)
 
-        realistic = o.get("realistic_opportunity", {}) or {}
+        realistic = offer.get("realistic_opportunity", {}) or {}
         realistic_verdict = realistic.get("verdict", "à étudier")
         realistic_explanation = realistic.get("explanation", "")
 
@@ -1440,34 +1576,33 @@ if offers_scored:
         if url:
             st.markdown(f"**Lien pour postuler :** [Ouvrir l'annonce]({url})")
 
-            if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
-                st.session_state["offer_text"] = to_text(o.get("text", ""))
-                st.session_state["selected_offer_meta"] = {
-                    "title": title,
-                    "company": company,
-                    "location": location,
-                    "url": url,
-                    "score": o.get("score", 0),
-                    "base_score": o.get("base_score", 0),
-                    "realistic_opportunity": o.get("realistic_opportunity", {}) or {},
-                }
+        if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
+            st.session_state["offer_text"] = to_text(offer.get("text", ""))
+            st.session_state["selected_offer_meta"] = {
+                "title": title,
+                "company": company,
+                "location": location,
+                "url": url,
+                "score": offer.get("score", 0),
+                "base_score": offer.get("base_score", 0),
+                "realistic_opportunity": realistic,
+            }
 
         with st.expander("Voir description", expanded=False):
-            st.write(to_text(o.get("text", "Description non disponible")))
+            st.write(to_text(offer.get("text", "Description non disponible")))
 
 
 # =========================================================
 # 3) COLLER UNE OFFRE
 # =========================================================
 st.subheader("3) Coller une offre d'emploi (optionnel)")
-
 st.text_area("Texte de l'offre", height=180, key="offer_text")
 
 
 # =========================================================
 # 4) ANALYSER CV vs OFFRE
 # =========================================================
-st.subheader("4) Analyser CV vs Offre")
+st.subheader("4) Analyse de correspondance")
 
 offer_text = st.session_state.get("offer_text", "")
 selected_offer_meta = st.session_state.get("selected_offer_meta", {}) or {}
@@ -1497,7 +1632,6 @@ if analysis:
     selected_realistic_verdict = selected_realistic.get("verdict", "à étudier")
     selected_realistic_explanation = selected_realistic.get("explanation", "")
 
-    # Détection simple du niveau du profil
     cv_lower = to_text(cv_text).lower()
 
     experience_markers = [
@@ -1510,7 +1644,6 @@ if analysis:
         "pilotage",
         "encadrement",
     ]
-
     junior_markers = ["stage", "alternance", "débutant", "junior"]
 
     if any(word in cv_lower for word in junior_markers):
@@ -1520,7 +1653,7 @@ if analysis:
     else:
         profile_level = "intermediate"
 
-    st.markdown("### Comprendre cette offre")
+    st.markdown("### Ta position pour cette offre")
 
     if selected_offer_score is not None:
         st.markdown(
@@ -1531,11 +1664,16 @@ if analysis:
         f"**Ce que ton CV montre dans cette annonce : {score}/100 — {interpretation}**"
     )
 
-    if selected_offer_score is not None:
+    selected_family = st.session_state.get("selected_family")
+    if selected_family:
         st.caption(
-            "Cette offre remonte parce qu’elle semble cohérente avec ton profil et ta direction métier. "
-            "Le score ci-dessous regarde plus strictement ce qui "
-            "apparaît réellement dans ton CV par rapport à l’annonce."
+            "Cette lecture combine la direction choisie et les éléments réellement visibles dans ton CV."
+        )
+    elif selected_offer_score is not None:
+        st.caption(
+            "Cette offre remonte parce qu’elle semble cohérente avec ton profil."
+            " Le score ci-dessous regarde plus strictement ce qui apparaît réellement"
+            " dans ton CV par rapport à l’annonce."
         )
 
     if selected_offer_base_score is not None:
@@ -1550,63 +1688,53 @@ if analysis:
         st.write(f"Pourquoi : {selected_realistic_explanation}")
 
     st.markdown("### Conseil rapide")
-    selected_family = st.session_state.get("selected_family")
 
     positioning_advice = selected_realistic_verdict
-
     direction_text = (
-        f'dans la direction "{selected_family}"'
+        f"dans la direction \"{selected_family}\""
         if selected_family
         else "par rapport à ton profil"
     )
 
     if positioning_advice in ["très réaliste", "réaliste"]:
-        st.success(f" Tu peux postuler : {direction_text}, cette offre est cohérente.")
-
+        st.success(f"Tu peux postuler : {direction_text}, cette offre est cohérente.")
     elif positioning_advice in ["accessible"]:
         st.info(
-            f" Tu peux tenter ta chance : {direction_text}, ton profil reste crédible avec un CV ajusté."
+            f"Tu peux tenter ta chance : {direction_text}, ton profil reste crédible avec un CV ajusté."
         )
-
     elif positioning_advice in ["exploratoire"]:
         st.warning(
-            f" Cette piste peut se tenter : {direction_text}, il manque encore des éléments visibles dans ton CV."
+            f"Cette piste peut se tenter : {direction_text}, il manque encore des éléments visibles dans ton CV."
         )
-
     elif positioning_advice in ["possible avec réserve"]:
         st.warning(
-            f" Cette offre peut se tenter : {direction_text}, mais un point concret peut freiner ta candidature."
+            f"Cette offre peut se tenter : {direction_text}, mais un point concret peut freiner ta candidature."
         )
-
     else:
         st.error(
-            f" {direction_text.capitalize()}, cette offre paraît encore trop éloignée."
+            f"{direction_text.capitalize()}, cette offre paraît encore trop éloignée."
         )
 
-        st.markdown("#### Ce que ça veut dire concrètement")
-
+    st.markdown("#### Ce que ça veut dire concrètement")
     if positioning_advice in ["très réaliste", "réaliste"]:
         st.write(
-            f"{direction_text.capitalize()}, ton profil correspond bien à ce type "
-            f"de poste. Les recruteurs devraient comprendre rapidement ta candidature."
+            f"{direction_text.capitalize()}, ton profil correspond bien à ce type de poste."
+            " Les recruteurs devraient comprendre rapidement ta candidature."
         )
-
     elif positioning_advice in ["accessible"]:
         st.write(
-            f"{direction_text.capitalize()}, tu n’as pas tous les éléments,"
-            "mais ton profil reste cohérent avec l’offre."
+            f"{direction_text.capitalize()}, tu n’as pas tous les éléments, mais ton profil"
+            " reste cohérent avec l’offre."
         )
-
     elif positioning_advice in ["exploratoire"]:
         st.write(
-            f"{direction_text.capitalize()}, ton profil s’en rapproche, "
-            "mais l’annonce attend des éléments peu visibles dans ton CV."
+            f"{direction_text.capitalize()}, ton profil s’en rapproche, mais l’annonce attend"
+            " des éléments peu visibles dans ton CV."
         )
-
     elif positioning_advice in ["possible avec réserve"]:
         st.write(
             f"{direction_text.capitalize()}, un point concret peut poser problème"
-            "(mobilité, expérience, compétences spécifiques)."
+            " (mobilité, expérience, compétences spécifiques)."
         )
     else:
         st.write(
@@ -1631,7 +1759,6 @@ if analysis:
         st.markdown("### Compétences manquantes identifiées")
 
         missing_competencies = analysis.get("missing_competencies", [])
-
         visible_missing_competencies = [
             comp
             for comp in missing_competencies
@@ -1654,44 +1781,55 @@ if analysis:
 
                 if "relation" in label_lower:
                     if profile_level == "junior":
-                        suggestion_text = "Accueil des clients lors de stages ou missions, gestion des demandes simples"
+                        suggestion_text = (
+                            "Accueil des clients lors de stages ou missions, gestion des demandes simples"
+                        )
                     elif profile_level == "experienced":
                         suggestion_text = (
-                            "Gestion de la relation client, suivi des demandes"
+                            "Gestion de la relation client, suivi des demandes et amélioration de la satisfaction"
                         )
-                        "et amélioration de la satisfaction"
                     else:
-                        suggestion_text = "Accueil des clients, traitement des demandes et suivi des dossiers"
-
+                        suggestion_text = (
+                            "Accueil des clients, traitement des demandes et suivi des dossiers"
+                        )
                 elif "bureautique" in label_lower:
                     if profile_level == "junior":
-                        suggestion_text = "Utilisation basique de Word et Excel pour saisir et organiser des données"
+                        suggestion_text = (
+                            "Utilisation basique de Word et Excel pour saisir et organiser des données"
+                        )
                     elif profile_level == "experienced":
-                        suggestion_text = "Maîtrise avancée des outils bureautiques"
-                        "(Excel, reporting, tableaux de suivi)"
+                        suggestion_text = (
+                            "Maîtrise avancée des outils bureautiques (Excel, reporting, tableaux de suivi)"
+                        )
                     else:
                         suggestion_text = (
-                            "Utilisation de Word, Excel et outils bureautiques"
+                            "Utilisation de Word, Excel et outils bureautiques pour le suivi et la gestion des données"
                         )
-                        "pour le suivi et la gestion des données"
-
                 elif "analyse" in label_lower or "suivi" in label_lower:
                     if profile_level == "junior":
-                        suggestion_text = "Participation au suivi d’activité et mise à jour de tableaux simples"
+                        suggestion_text = (
+                            "Participation au suivi d’activité et mise à jour de tableaux simples"
+                        )
                     elif profile_level == "experienced":
-                        suggestion_text = "Analyse de données, suivi de performance et reporting régulier"
+                        suggestion_text = (
+                            "Analyse de données, suivi de performance et reporting régulier"
+                        )
                     else:
-                        suggestion_text = "Suivi d’activité, mise à jour de tableaux Excel et reporting simple"
-
+                        suggestion_text = (
+                            "Suivi d’activité, mise à jour de tableaux Excel et reporting simple"
+                        )
                 elif "qualité" in label_lower or "conformité" in label_lower:
-                    suggestion_text = "Contrôle de conformité, respect des procédures et suivi de la qualité"
-
+                    suggestion_text = (
+                        "Contrôle de conformité, respect des procédures et suivi de la qualité"
+                    )
                 elif (
                     "organisation" in label_lower
                     or "coordination" in label_lower
                     or "planning" in label_lower
                 ):
-                    suggestion_text = "Organisation des tâches, coordination d’activités et suivi de planning"
+                    suggestion_text = (
+                        "Organisation des tâches, coordination d’activités et suivi de planning"
+                    )
 
                 if suggestion_text:
                     st.success(f"À ajouter dans ton CV : {suggestion_text}")
@@ -1710,7 +1848,8 @@ if analysis:
         st.write(f"Bonus familles : +{family_bonus}")
 
         if st.checkbox(
-            "Afficher les détails techniques avancés", key="debug_terms_checkbox"
+            "Afficher les détails techniques avancés",
+            key="debug_terms_checkbox",
         ):
             st.markdown("#### Mots trouvés (brut)")
             raw_matched_terms = analysis.get("matched_terms", [])
@@ -1733,7 +1872,8 @@ if analysis:
     st.markdown("### Mots forts")
 
     raw_strong_terms = prepare_display_terms(
-        analysis.get("matched_terms", []), max_items=40
+        analysis.get("matched_terms", []),
+        max_items=40,
     )
 
     banned_terms = {
