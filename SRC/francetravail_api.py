@@ -1,17 +1,19 @@
+import os
+from requests.auth import HTTPBasicAuth
 import requests
 import time
+from dotenv import load_dotenv
 
 
 # =========================================================
 # CONFIG — À PERSONNALISER AVEC TES IDENTIFIANTS
 # =========================================================
-CLIENT_ID = "PAR_hephaistos_3bd60d2f44612d22fe8311e8d1f471c1a37bfaa339eb135d3d53f3f80788638f"
-CLIENT_SECRET = "5feb8e627ede7d9d42200c0480aeaca18c9ec484c728f4b32c2dc6cddebeea23"
+
 TOKEN_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
 OFFERS_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 COMMUNES_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/referentiel/communes"
 SCOPE = "o2dsoffre api_offresdemploiv2"
-
+load_dotenv()
 
 # =========================================================
 # GESTION DU TOKEN (avec cache)
@@ -20,7 +22,6 @@ _token_cache = {
     "access_token": None,
     "expires_at": 0
 }
-
 
 def get_access_token() -> str:
     """
@@ -33,17 +34,36 @@ def get_access_token() -> str:
     if _token_cache["access_token"] and now < _token_cache["expires_at"]:
         return _token_cache["access_token"]
 
+    client_id = os.getenv("FT_CLIENT_ID")
+    client_secret = os.getenv("FT_CLIENT_SECRET")
+
+    print("CLIENT_ID trouvé :", client_id is not None)
+    print("CLIENT_SECRET trouvé :", client_secret is not None)
+
+    if client_id:
+        print("Début CLIENT_ID :", client_id[:20])
+
+    if client_secret:
+        print("Longueur CLIENT_SECRET :", len(client_secret))
+
+    print("SCOPE :", os.getenv("FT_SCOPE", SCOPE))
     # Sinon, on demande un nouveau token
     data = {
-        "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "scope": "api_offresdemploiv2 o2dsoffre"
-    }
+    "grant_type": "client_credentials",
+    "scope": os.getenv("FT_SCOPE", SCOPE)
+
+}
+
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    resp = requests.post(TOKEN_URL, data=data, headers=headers)
+    resp = requests.post(
+        TOKEN_URL,
+        data=data,
+        headers=headers,
+        auth=HTTPBasicAuth(client_id, client_secret),
+        timeout=30,
+    )
 
     if resp.status_code != 200:
         raise Exception(f"Erreur token : {resp.text}")
