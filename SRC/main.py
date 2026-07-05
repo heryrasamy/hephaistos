@@ -2,9 +2,7 @@ import re
 import unicodedata
 from collections import Counter
 from typing import List
-
 import streamlit as st
-
 from cv_extract import extract_text_from_upload
 from matching_simple import score_cv_offer, STOPWORDS, extract_terms
 from job_inference import (
@@ -140,10 +138,10 @@ def _strip_accents_local(s: str) -> str:
 def _normalize_local(text: str) -> str:
     text = (text or "").lower()
     text = _strip_accents_local(text)
-    text = re.sub(r"[/|\\,_;:()\[\]{}]+", "", text)
-    text = re.sub(r"[-'']+", "", text)
-    text = re.sub(r"[^a-z0-9\\s]+", " ", text)
-    text = re.sub(r"\\s+", " ", text).strip()
+    text = re.sub(r"[/|\\,_;:()\[\]{}]", "", text)
+    text = re.sub(r"[-'']", "", text)
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -763,9 +761,89 @@ def display_family_label(family):
     return FAMILY_LABELS.get(family, family.replace("_", " ").capitalize())
 
 
+def is_reorientation_mode(main_family, selected_family):
+    """
+    Détermine si l'utilisateur est en mode réorientation.
+
+    Le mode réorientation est actif si une famille sélectionnée existe,
+    une famille principale existe, et que la famille sélectionnée est différente
+    de la famille principale.
+    """
+    if not selected_family or not main_family:
+        return False
+
+    if selected_family == main_family:
+        return False
+
+    return True
+
+
+def build_reorientation_quieries(selected_family):
+
+    """
+    Construit les requêtes de recherche quand l'utilisateur choisit
+    une direction différente de la dominante du CV.
+    """
+
+    family_seed_queries = {
+        "Production": [
+            "agent de production",
+            "assistant de production",
+            "chargé de production",
+            "responsable production",
+        ],
+        "Maintenance": [
+            "technicien de maintenance",
+            "agent de maintenance",
+            "maintenance industrielle",
+        ],
+        "Administratif & Gestion": [
+            "assistant administratif",
+            "assistant de gestion",
+            "gestionnaire administratif",
+            "secrétaire",
+        ],
+        "Communication & Marketing": [
+            "chargé de communication",
+            "assistant communication",
+            "marketing",
+            "community manager",
+        ],
+        "Analyse pilotage": [
+            "assistant contrôle de gestion",
+            "chargé d'études",
+            "analyste",
+            "reporting",
+        ],
+    }
+
+    if not selected_family:
+        return []
+
+    return family_seed_queries.get(selected_family, [selected_family])
+
+
+def get_search_keywords_by_mode(is_reorientatin_mode_flag, keywords_text):
+    """
+    Retourne les mots-clés à injecter dans la recherche selon le mode actif.
+    En mode réorientation, cette fonction permettra de mieux contrôler
+    les mots-clés hérités du CV.
+    """
+
+    cleaned_keywords = [
+        keyword.strip()
+        for keyword in (keywords_text or "").split(",")
+        if keyword.strip()
+    ]
+
+    return cleaned_keywords
+
+
 # =========================================================
 # 1) IMPORTER LE CV
 # =========================================================
+
+
 st.subheader("1) Importer votre CV")
 
 uploaded = st.file_uploader(
@@ -1079,7 +1157,7 @@ if uploaded:
 
 
 # =========================================================
-# 2) PHASE 1 — TROUVER DES OFFRES
+# 2) PHASE 1 — TROUVER DES OFFRES localisation
 # =========================================================
 st.subheader("2) Phase 1 — Trouver des offres (France Travail)")
 st.markdown("### Localisation")
@@ -1094,32 +1172,40 @@ location_query = st.text_input(
 rayon_km = st.slider("Rayon autour du lieu (km)", 0, 100, 10)
 
 selected_commune = None
+selected_departement = None
 generated_queries = st.session_state.get("generated_queries", [])
 
-if location_query.strip():
-    try:
-        token = get_access_token()
-        all_communes = search_communes(token)
-        suggestions = filter_communes(all_communes, location_query, limit=20)
+location_clean = location_query.strip()
 
-        if suggestions:
-            selected_label = st.selectbox(
-                "Suggestions de communes",
-                options=[format_commune_label(c) for c in suggestions],
-            )
+if location_clean:
+    if location_clean.isdigit() and len(location_clean) == 2:
+        selected_departement = location_clean
+        st.caption(f"Département sélectionné : {selected_departement}")
 
-            selected_commune = next(
-                c for c in suggestions if format_commune_label(c) == selected_label
-            )
+    else:
+        try:
+            token = get_access_token()
+            all_communes = search_communes(token)
+            suggestions = filter_communes(all_communes, location_clean, limit=20)
 
-            st.caption(
-                f"Commune sélectionnée : {selected_commune['libelle']} | CP {selected_commune['codePostal']}"
-            )
-        else:
-            st.warning("Aucune commune trouvée pour cette saisie.")
+            if suggestions:
+                selected_label = st.selectbox(
+                    "Suggestions de communes",
+                    options=[format_commune_label(c) for c in suggestions],
+                )
 
-    except Exception as e:
-        st.error(f"Erreur référentiel communes : {e}")
+                selected_commune = next(
+                    c for c in suggestions if format_commune_label(c) == selected_label
+                )
+
+                st.caption(
+                    f"Commune sélectionnée : {selected_commune['libelle']} | CP {selected_commune['codePostal']}"
+                )
+            else:
+                st.warning("Aucune commune trouvée pour cette saisie.")
+
+        except Exception as e:
+            st.error(f"Erreur référentiel communes : {e}")
 
 keywords = st.text_input("Mots-clés (séparés par virgules)", key="keywords_input")
 
@@ -1141,9 +1227,11 @@ if st.button("Rechercher et classer"):
             base_params["commune"] = selected_commune["code"]
             base_params["distance"] = rayon_km
 
+        elif selected_departement:
+            base_params["departement"] = selected_departement
+            base_params["distance"] = rayon_km
+
         queries = []
-        selected_family = st.session_state.get("selected_family")
-        cv_main_family_for_mode = cv_families[0] if cv_families else None
 
         family_seed_queries = {
             "Production": [
@@ -1180,9 +1268,18 @@ if st.button("Rechercher et classer"):
             )
             queries.extend(selected_family_queries)
 
-        if keywords.strip():
-            manual_keywords = [k.strip() for k in keywords.split(",") if k.strip()]
-            queries.extend(manual_keywords)
+        is_reorientation_mode_flag = (
+            selected_family is not None
+            and selected_family != main_family
+        )
+
+        search_keywords = get_search_keywords_by_mode(
+            is_reorientation_mode_flag,
+            keywords,
+        )
+
+        if search_keywords:
+            queries.extend(search_keywords)
 
         if not selected_family:
             for query in st.session_state.get("generated_queries", []):
@@ -1200,7 +1297,6 @@ if st.button("Rechercher et classer"):
                 base_params=base_params,
                 max_results_per_query=max_results,
             )
-
             st.write(f"Offres récupérées : {len(offers_raw)}")
 
             direction_offer_filters = {
@@ -1277,10 +1373,12 @@ if st.button("Rechercher et classer"):
                     )
 
         scored = []
-        is_reorientation_mode = (
-            st.session_state.get("selected_family") is not None
-            and st.session_state.get("selected_family") != main_family
+        is_reorientation_mode_flag = is_reorientation_mode(
+            main_family,
+            st.session_state.get("selected_family")
+            
         )
+       
 
         for offer in offers_raw:
             description = to_text(offer.get("text", ""))
@@ -1336,18 +1434,24 @@ if st.button("Rechercher et classer"):
 
             adjusted_score = score_value
 
-            is_reorientation_mode = False
-            if selected_family and cv_main_family_for_mode:
-                if selected_family != cv_main_family_for_mode:
-                    is_reorientation_mode = True
+            cv_main_family_for_mode = cv_families[0] if cv_families else None
 
-                if is_reorientation_mode:
-                    adjusted_score = int(score_value * 0.7)
-                if selected_family and offer_main_family:
-                    if selected_family == offer_main_family:
-                        adjusted_score += 20
-                    elif offer_main_family in cv_families_for_scoring[:3]:
-                        adjusted_score += 10
+            is_reorientation_mode_flag = (
+                selected_family is not None
+                and cv_main_family_for_mode is not None
+                and selected_family != cv_main_family_for_mode
+            )
+
+            adjusted_score = score_value
+
+            if is_reorientation_mode_flag:
+                adjusted_score = int(score_value * 0.7)
+
+            if selected_family and offer_main_family:
+                if selected_family == offer_main_family:
+                    adjusted_score += 20
+                elif offer_main_family in cv_families_for_scoring[:3]:
+                    adjusted_score += 10
 
             title_text = offer_title_clean.lower()
             description_lower = offer_text_clean.lower()
@@ -1511,25 +1615,25 @@ if st.button("Rechercher et classer"):
             offer["realistic_opportunity"] = realistic_summary
 
             keep_offer = True
-            if is_reorientation_mode:
+            if is_reorientation_mode_flag:
                 if selected_family and offer_main_family:
                     if selected_family != offer_main_family:
                         if offer_main_family not in cv_families_for_scoring[:2]:
                             keep_offer = False
 
-                if keep_offer:
-                    has_min_score = adjusted_score >= 35
-                    has_common_terms = len(matched_terms) > 0
-                    has_family_link = (
-                        offer_main_family in cv_families_for_scoring
-                        if offer_main_family
-                        else False
-                    )
+            if keep_offer:
+                has_min_score = adjusted_score >= 35
+                has_common_terms = len(matched_terms) > 0
+                has_family_link = (
+                    offer_main_family in cv_families_for_scoring
+                    if offer_main_family
+                    else False
+                )
 
-                    if not (
-                        has_min_score or has_common_terms or has_family_link
-                    ):
-                        keep_offer = False
+                if not (
+                    has_min_score or has_common_terms or has_family_link
+                ):
+                    keep_offer = False
 
             if keep_offer:
                 scored.append(offer)
@@ -1549,8 +1653,11 @@ offers_scored = st.session_state.get("offers_scored", [])
 
 if offers_scored:
     st.subheader("Top 30 (triées par compatibilité)")
+    if st.session_state.get("last_analysis"):
+        st.success("Une analyse est prête pour l'offre sélectionnée.")
 
-    for i, offer in enumerate(offers_scored[:30]):
+    display_limit = st.session_state.get("display_limit", 10)
+    for i, offer in enumerate(offers_scored[:display_limit]):
         title = to_text(offer.get("title", "Sans titre"))
         company = to_text(offer.get("company", ""))
         location = to_text(offer.get("location", ""))
@@ -1576,8 +1683,12 @@ if offers_scored:
         if url:
             st.markdown(f"**Lien pour postuler :** [Ouvrir l'annonce]({url})")
 
-        if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
-            st.session_state["offer_text"] = to_text(offer.get("text", ""))
+        if st.button("Analyser mon CV avec cette offre", key=f"use_offer_{i}"):
+            st.session_state["selected_offer_index"] = i
+          
+            offer_text_selected = to_text(offer.get("text", ""))
+
+            st.session_state["offer_text"] = offer_text_selected
             st.session_state["selected_offer_meta"] = {
                 "title": title,
                 "company": company,
@@ -1588,10 +1699,26 @@ if offers_scored:
                 "realistic_opportunity": realistic,
             }
 
+            if cv_text and offer_text_selected.strip():
+                result = score_cv_offer(
+                    to_text(cv_text),
+                    offer_text_selected,
+                )
+                st.session_state["last_analysis"] = result
         with st.expander("Voir description", expanded=False):
             st.write(to_text(offer.get("text", "Description non disponible")))
 
+            selected_offer_index = st.session_state.get("selected_offer_index")
+            continue_listing = st.session_state.get("continue_listing", False)
 
+        if (
+            selected_offer_index is not None
+            and not continue_listing
+            and i >= selected_offer_index
+        ):
+            break
+
+   
 # =========================================================
 # 3) COLLER UNE OFFRE
 # =========================================================
@@ -1606,16 +1733,6 @@ st.subheader("4) Analyse de correspondance")
 
 offer_text = st.session_state.get("offer_text", "")
 selected_offer_meta = st.session_state.get("selected_offer_meta", {}) or {}
-
-if st.button("Analyser CV vs Offre"):
-    if not cv_text:
-        st.warning("Importer un CV d'abord.")
-    elif not offer_text.strip():
-        st.warning("Aucune offre fournie.")
-    else:
-        result = score_cv_offer(to_text(cv_text), to_text(offer_text))
-        st.session_state["last_analysis"] = result
-
 analysis = st.session_state.get("last_analysis")
 
 if analysis:
@@ -1841,16 +1958,6 @@ if analysis:
         else:
             st.write("Aucune compétence manquante interprétée.")
 
-    with st.expander("Voir le détail technique (debug)"):
-        st.markdown("#### Détail du score")
-        st.write(f"Coverage : {coverage}%")
-        st.write(f"Bonus expressions : +{bonus}")
-        st.write(f"Bonus familles : +{family_bonus}")
-
-        if st.checkbox(
-            "Afficher les détails techniques avancés",
-            key="debug_terms_checkbox",
-        ):
             st.markdown("#### Mots trouvés (brut)")
             raw_matched_terms = analysis.get("matched_terms", [])
 
@@ -1931,3 +2038,8 @@ if analysis:
             st.write(f"- {suggestion}")
     else:
         st.write("Aucune suggestion générée.")
+
+    if st.session_state.get("selected_offer_index") is not None:
+        if st.button("Continuer à voir les offres"):
+            st.session_state["continue_listing"] = True
+            st.rerun()

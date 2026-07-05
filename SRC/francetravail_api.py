@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 # CONFIG — À PERSONNALISER AVEC TES IDENTIFIANTS
 # =========================================================
 
-TOKEN_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
+TOKEN_URL = (
+    "https://entreprise.francetravail.fr/connexion/oauth2/"
+    "access_token?realm=/partenaire"
+)
 OFFERS_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 COMMUNES_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/referentiel/communes"
 SCOPE = "o2dsoffre api_offresdemploiv2"
@@ -37,23 +40,10 @@ def get_access_token() -> str:
     client_id = os.getenv("FT_CLIENT_ID")
     client_secret = os.getenv("FT_CLIENT_SECRET")
 
-    print("CLIENT_ID trouvé :", client_id is not None)
-    print("CLIENT_SECRET trouvé :", client_secret is not None)
-
-    if client_id:
-        print("Début CLIENT_ID :", client_id[:20])
-
-    if client_secret:
-        print("Longueur CLIENT_SECRET :", len(client_secret))
-
-    print("SCOPE :", os.getenv("FT_SCOPE", SCOPE))
-    # Sinon, on demande un nouveau token
     data = {
-    "grant_type": "client_credentials",
-    "scope": os.getenv("FT_SCOPE", SCOPE)
-
-}
-
+        "grant_type": "client_credentials",
+        "scope": os.getenv("FT_SCOPE", SCOPE)
+    }
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -73,7 +63,7 @@ def get_access_token() -> str:
     expires_in = token_data.get("expires_in", 3600)
 
     _token_cache["access_token"] = access_token
-    _token_cache["expires_at"] = now + expires_in - 30  # marge de sécurité
+    _token_cache["expires_at"] = now + expires_in - 30
 
     return access_token
 
