@@ -5,6 +5,8 @@ import unicodedata
 from collections import Counter
 from typing import Dict, List, Tuple
 
+from francetravail_api import search_unique_rome_jobs
+
 
 # =========================================================
 # OUTILS DE BASE
@@ -328,8 +330,62 @@ def get_top_cv_families(cv_text: str, top_n: int = 3) -> List[str]:
             break
 
     return results
+def filter_rome_candidate_terms(terms: List[str]) -> List[str]:
+    """
+    Garde uniquement les termes assez pertinents pour interroger ROME.
+    """
+    blacklist = {
+        "besoin", "besoins", "concevoir", "concret", "concrete",
+        "dune", "avec", "sans", "pour", "dans", "mission",
+        "missions", "activite", "activites", "projet", "projets",
+        "experience", "competence", "competences"
+    }
 
+    candidates = []
 
+    for term in terms:
+        clean = normalize_text(str(term))
+
+        if not clean:
+            continue
+
+        if clean in blacklist:
+            continue
+
+        if len(clean) < 4:
+            continue
+
+        candidates.append(term)
+
+    return candidates
+
+def infer_rome_jobs_from_terms(
+    cv_terms: List[str],
+    max_terms: int = 5
+) -> List[Dict[str, str]]:
+    """
+    Recherche des métiers ROME à partir des termes détectés dans le CV.
+    """
+    rome_jobs: Dict[str, Dict[str, str]] = {}
+
+    for term in cv_terms[:max_terms]:
+        query = str(term).strip()
+
+        if not query:
+            continue
+
+        jobs = search_unique_rome_jobs(query)
+
+        for job in jobs:
+            metier_code = job.get("metier_code")
+
+            if not metier_code:
+                continue
+
+            if metier_code not in rome_jobs:
+                rome_jobs[metier_code] = job
+
+    return list(rome_jobs.values())
 # =========================================================
 # INFERENCE METIER
 # =========================================================
