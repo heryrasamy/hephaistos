@@ -6,6 +6,10 @@ from collections import Counter
 from typing import Dict, List, Tuple
 
 from francetravail_api import search_unique_rome_jobs
+from francetravail_api import (
+    get_rome_job_profile,
+    build_rome_job_reference,
+)
 
 
 # =========================================================
@@ -332,43 +336,167 @@ def get_top_cv_families(cv_text: str, top_n: int = 3) -> List[str]:
     return results
 def filter_rome_candidate_terms(terms: List[str]) -> List[str]:
     """
-    Garde uniquement les termes assez pertinents pour interroger ROME.
+    Construit des expressions métier pertinentes à partir des termes du CV.
+
+    Priorité :
+    1. expressions de 2 ou 3 mots ;
+    2. termes professionnels isolés ;
+    3. suppression des coordonnées, rubriques et éléments parasites.
     """
+
     blacklist = {
-        "besoin", "besoins", "concevoir", "concret", "concrete",
-        "dune", "avec", "sans", "pour", "dans", "mission",
-        "missions", "activite", "activites", "projet", "projets",
-        "experience", "competence", "competences"
+        "besoin", "besoins", "concret", "concrete",
+        "mission", "missions", "activite", "activites",
+        "experience", "experiences",
+        "competence", "competences",
+        "telephone", "email", "adresse",
+        "identite", "professionnelle", "professionnel",
+        "profil", "contact", "coordonnees",
+        "depuis", "plus", "vingt", "parcours",
+        "autour", "meme","besoin", "besoins", "concret", "concrete",
+        "mission", "missions", "activite", "activites",
+        "experience", "experiences",
+        "competence", "competences",
+        "telephone", "email", "mail", "adresse",
+        "identite", "professionnelle", "professionnel",
+        "profil", "contact", "coordonnees",
+        "depuis", "plus", "vingt", "parcours",
+        "autour", "meme",
+        "entrepreneur", "independant", "independante",
+        "toulouse","parcours",
+        "parcours",
+        "savoir-faire",
+        "formation",
+        "formations",
+        "candidature",
+        "poste",
+        "universite",
+        "université",
     }
 
-    candidates = []
+    connectors = {
+        "de", "du", "des", "d", "en", "et", "a", "au",
+    }
+
+    separators = {
+        "•", "-", "|", "/", "–", "—",
+    }
+
+    segments: List[List[str]] = []
+    current_segment: List[str] = []
 
     for term in terms:
-        clean = normalize_text(str(term))
+        original = str(term).strip()
+
+        if not original:
+            continue
+
+        if original in separators:
+            if current_segment:
+                segments.append(current_segment)
+                current_segment = []
+            continue
+
+        clean = normalize_text(original)
 
         if not clean:
+            continue
+
+        # Les titres entièrement en majuscules sont généralement
+        # des rubriques, des noms ou des éléments administratifs.
+        if original.isupper() and len(original) > 2:
             continue
 
         if clean in blacklist:
             continue
 
-        if len(clean) < 4:
+        if clean.isdigit():
             continue
 
-        candidates.append(term)
+        if "@" in original:
+            continue
+
+        current_segment.append(original)
+
+    if current_segment:
+        segments.append(current_segment)
+
+    candidates: List[str] = []
+    seen = set()
+
+    def add_candidate(words: List[str]) -> None:
+        phrase = " ".join(words).strip()
+        normalized = normalize_text(phrase)
+        normalized_words = normalized.split()
+
+        if not normalized_words:
+            return
+
+        if normalized_words[0] in connectors:
+            return
+
+        if normalized_words[-1] in connectors:
+            return
+
+        meaningful_words = [
+            word
+            for word in normalized.split()
+            if word not in connectors
+            and word not in blacklist
+            and len(word) >= 3
+        ]
+
+        if not normalized:
+            return
+
+        if not meaningful_words:
+            return
+
+        if normalized in seen:
+            return
+
+        seen.add(normalized)
+        candidates.append(phrase)
+
+    # Expressions métier : trois mots puis deux mots.
+    for segment in segments:
+        for size in (3, 2):
+            if len(segment) < size:
+                continue
+
+            for index in range(len(segment) - size + 1):
+                add_candidate(segment[index:index + size])
+
+    # Termes isolés en dernier recours.
+    for segment in segments:
+        for term in segment:
+            clean = normalize_text(term)
+
+            if clean in connectors:
+                continue
+
+            if clean in blacklist:
+                continue
+
+            if len(clean) < 4:
+                continue
+
+            add_candidate([term])
 
     return candidates
-
 def infer_rome_jobs_from_terms(
     cv_terms: List[str],
-    max_terms: int = 5
+    max_terms: int = 5,
 ) -> List[Dict[str, str]]:
     """
-    Recherche des métiers ROME à partir des termes détectés dans le CV.
+    Recherche des métiers ROME à partir des termes détectés dans le CV
+    puis les classe selon le nombre de termes du CV qui convergent vers eux.
     """
-    rome_jobs: Dict[str, Dict[str, str]] = {}
+
+    rome_jobs: Dict[str, Dict] = {}
 
     for term in cv_terms[:max_terms]:
+
         query = str(term).strip()
 
         if not query:
@@ -377,15 +505,37 @@ def infer_rome_jobs_from_terms(
         jobs = search_unique_rome_jobs(query)
 
         for job in jobs:
-            metier_code = job.get("metier_code")
 
-            if not metier_code:
+            code = job.get("metier_code")
+
+            if not code:
                 continue
 
-            if metier_code not in rome_jobs:
-                rome_jobs[metier_code] = job
+            if code not in rome_jobs:
 
-    return list(rome_jobs.values())
+                rome_jobs[code] = {
+                    **job,
+                    "matched_terms": set(),
+                    "term_score": 0,
+                }
+
+            rome_jobs[code]["matched_terms"].add(query)
+            rome_jobs[code]["term_score"] = len(
+                rome_jobs[code]["matched_terms"]
+            )
+
+    results = list(rome_jobs.values())
+
+    results.sort(
+        key=lambda j: (
+            -j["term_score"],
+            j["metier_libelle"],
+        )
+    )
+
+    return results
+
+
 # =========================================================
 # INFERENCE METIER
 # =========================================================
@@ -508,3 +658,118 @@ def build_search_queries_from_job_summary(
         add_query(topic)
 
     return queries[:max_queries]
+
+def compare_cv_to_rome_reference(
+    cv_text: str,
+    rome_reference: Dict
+) -> Dict[str, List[Dict]]:
+    """
+    Compare le texte brut du CV aux compétences et savoirs ROME.
+
+    Classe les éléments en deux groupes :
+    - présents dans le CV ;
+    - non repérés dans le CV.
+
+    Cette première version repose sur une correspondance lexicale simple.
+    """
+
+    normalized_cv = normalize_text(cv_text or "")
+
+    present = []
+    missing = []
+
+    reference_items = (
+        rome_reference.get("competences", [])
+        + rome_reference.get("savoirs", [])
+    )
+
+    for item in reference_items:
+        libelle = item.get("libelle", "")
+        normalized_label = normalize_text(libelle)
+
+        if not normalized_label:
+            continue
+
+        label_terms = [
+            word
+            for word in normalized_label.split()
+            if len(word) >= 4
+        ]
+
+        matched_terms = [
+            word
+            for word in label_terms
+            if word in normalized_cv
+        ]
+
+        coverage = (
+            len(matched_terms) / len(label_terms)
+            if label_terms
+            else 0
+        )
+
+        result_item = {
+            **item,
+            "matched_terms": matched_terms,
+            "coverage": round(coverage, 2),
+        }
+
+        if coverage >= 0.5:
+            present.append(result_item)
+        else:
+            missing.append(result_item)
+
+    present.sort(
+        key=lambda item: item.get("coverage", 0),
+        reverse=True,
+    )
+
+    missing.sort(
+        key=lambda item: item.get("coverage", 0),
+        reverse=True,
+    )
+
+    return {
+        "present": present,
+        "missing": missing,
+    }
+if __name__ == "__main__":
+    cv_text = """
+    Gestion administrative de dossiers.
+    Organisation de réunions.
+    Rédaction de comptes rendus.
+    Mise à jour de bases de données.
+    Accueil et renseignement du public.
+    Utilisation des outils bureautiques.
+    """
+
+    profile = get_rome_job_profile("M1607")
+    reference = build_rome_job_reference(profile)
+
+    comparison = compare_cv_to_rome_reference(
+        cv_text=cv_text,
+        rome_reference=reference,
+    )
+
+    print("Compétences présentes :", len(comparison["present"]))
+    print("Compétences non repérées :", len(comparison["missing"]))
+
+    print("\nPrésentes :")
+    for item in comparison["present"][:10]:
+        print(
+            item["coverage"],
+            "-",
+            item["libelle"],
+            "- termes trouvés :",
+            item["matched_terms"],
+        )
+
+    print("\nNon repérées :")
+    for item in comparison["missing"][:10]:
+        print(
+            item["coverage"],
+            "-",
+            item["libelle"],
+            "- termes trouvés :",
+            item["matched_terms"],
+        )

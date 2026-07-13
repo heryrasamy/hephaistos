@@ -16,7 +16,12 @@ from job_inference import (
 )
 from offers_phase1 import fetch_offers_multi_queries
 from opportunity_rules import build_realistic_opportunity_summary
-from location_helper import filter_communes, format_commune_label
+from location_helper import (
+    filter_communes,
+    format_commune_label,
+    search_communes_geo_api,
+)
+from francetravail_api import get_access_token
 
 
 st.set_page_config(page_title="Hephaistos", layout="wide")
@@ -908,10 +913,13 @@ if uploaded:
     else:
         main_job_label = main_job_data or "inconnu"
         domain_label = job_summary.get("domain", "inconnu")
-        
-        rome_jobs = infer_rome_jobs_from_terms([main_job_label])
 
-    rome_jobs = infer_rome_jobs_from_terms([main_job_label])
+    rome_candidate_terms = filter_rome_candidate_terms(cv_terms_for_inference)
+    
+    rome_jobs = infer_rome_jobs_from_terms(
+        rome_candidate_terms,
+        max_terms=5,
+    )
 
     # ------------------------
     # Mots-clés suggérés
@@ -1139,7 +1147,7 @@ generated_queries = st.session_state.get("generated_queries", [])
 if location_query.strip():
     try:
         token = get_access_token()
-        all_communes = search_communes(token)
+        all_communes = search_communes_geo_api(location_query)
         suggestions = filter_communes(all_communes, location_query, limit=20)
 
         if suggestions:
@@ -1203,12 +1211,13 @@ if st.button("Rechercher et classer"):
         if not queries:
             st.warning("Aucune requête de recherche disponible.")
         else:
-            offers_raw = fetch_offers_multi_queries(
-                queries=queries,
-                base_params=base_params,
-                max_results_per_query=max_results,
-            )
-
+            with st.spinner("Héphaïstos recherche et classe les offres..."):
+                offers_raw = fetch_offers_multi_queries(
+                    queries=queries,
+                    base_params=base_params,
+                    max_results_per_query=max_results,
+                    debug=False,
+                )
             st.write(f"Offres récupérées : {len(offers_raw)}")
 
             scored = []

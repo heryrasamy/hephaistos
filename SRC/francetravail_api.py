@@ -15,39 +15,40 @@ TOKEN_URL = (
 )
 OFFERS_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 COMMUNES_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/referentiel/communes"
-SCOPE = "o2dsoffre api_offresdemploiv2"
+SCOPE = "o2dsoffre api_offresdemploiv2 api_referentielspartenairev1"
 load_dotenv()
 
 # =========================================================
 # GESTION DU TOKEN (avec cache)
 # =========================================================
-_token_cache = {
-    "access_token": None,
-    "expires_at": 0
-}
+_token_cache = {}
+
 
 def get_access_token(scope: str | None = None) -> str:
     """
     Récupère un token OAuth2 France Travail.
-    Utilise un cache pour éviter les appels inutiles.
+    Le cache est séparé par scope.
     """
     now = time.time()
 
-    # Token encore valide ?
-    if _token_cache["access_token"] and now < _token_cache["expires_at"]:
-        return _token_cache["access_token"]
+    requested_scope = scope or os.getenv("FT_SCOPE", SCOPE)
+
+    cached_token = _token_cache.get(requested_scope)
+
+    if cached_token and now < cached_token["expires_at"]:
+        return cached_token["access_token"]
 
     client_id = os.getenv("FT_CLIENT_ID")
     client_secret = os.getenv("FT_CLIENT_SECRET")
 
-    requested_scope = scope or os.getenv("FT_SCOPE", SCOPE)
-
     data = {
         "grant_type": "client_credentials",
-        "scope": requested_scope
+        "scope": requested_scope,
     }
 
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
 
     resp = requests.post(
         TOKEN_URL,
@@ -58,14 +59,18 @@ def get_access_token(scope: str | None = None) -> str:
     )
 
     if resp.status_code != 200:
-        raise Exception(f"Erreur token : {resp.text}")
+        raise Exception(
+            f"Erreur token : status={resp.status_code} | body={resp.text}"
+        )
 
     token_data = resp.json()
     access_token = token_data.get("access_token")
     expires_in = token_data.get("expires_in", 3600)
 
-    _token_cache["access_token"] = access_token
-    _token_cache["expires_at"] = now + expires_in - 30
+    _token_cache[requested_scope] = {
+        "access_token": access_token,
+        "expires_at": now + expires_in - 30,
+    }
 
     return access_token
 
@@ -108,7 +113,7 @@ def search_communes(token: str):
     resp = requests.get(COMMUNES_URL, headers=headers)
 
     if resp.status_code != 200:
-        raise Exception(f"Erreur API communes : {resp.text}")
+        raise Exception(f"Erreur API communes : status={resp.status_code} | body={resp.text}")
 
     return resp.json()
 
@@ -132,6 +137,8 @@ def normalize_offer(o: dict) -> dict:
         "url": o.get("origineOffre", {}).get("urlOrigine", ""),
         "raw": o
     }
+
+
 def search_rome_appellations(query: str) -> dict:
     """
     Recherche des appellations métier dans l'API ROME Métiers.
@@ -158,9 +165,13 @@ def search_rome_appellations(query: str) -> dict:
         params=params,
         timeout=15,
     )
+    if response.status_code == 429:
+        return {"resultats": []}
 
     response.raise_for_status()
     return response.json()
+
+
 def normalize_rome_appellations(data: dict) -> list[dict]:
     """
     Transforme la réponse brute ROME en liste simple exploitable.
@@ -180,6 +191,147 @@ def normalize_rome_appellations(data: dict) -> list[dict]:
         })
 
     return normalized
+
+def get_rome_job_profile(
+    rome_code: str,
+    fields: list[str] | None = None
+) -> dict:
+    """
+    Lit la fiche détaillée d'un métier ROME à partir de son code.
+    Exemple : M1607, E1104, H2906.
+    """
+    if not rome_code:
+        return {}
+
+    token = get_access_token(
+        scope="api_rome-fiches-metiersv1 nomenclatureRome"
+    )
+
+    url = (
+        "https://api.francetravail.io/partenaire/"
+        f"rome-fiches-metiers/v1/fiches-rome/fiche-metier/{rome_code}"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+
+    params = {}
+
+    if fields:
+        params["champs"] = ",".join(fields)
+
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params,
+        timeout=30,
+    )
+
+    if response.status_code == 429:
+        return {}
+
+    if response.status_code != 200:
+        raise Exception(
+            "Erreur API fiche métier ROME : "
+            f"status={response.status_code} | body={response.text}"
+        )
+
+    return response.json()
+def extract_rome_competences(profile: dict) -> list[dict]:
+    """
+    Extrait toutes les compétences d'une fiche métier ROME
+    dans un format simple exploitable par Héphaïstos.
+    """
+
+    competences = []
+
+    for groupe in profile.get("groupesCompetencesMobilisees", []):
+
+        enjeu = groupe.get("enjeu", {})
+        enjeu_code = enjeu.get("code", "")
+        enjeu_libelle = enjeu.get("libelle", "")
+
+        for comp in groupe.get("competences", []):
+
+            competences.append({
+                "enjeu_code": enjeu_code,
+                "enjeu": enjeu_libelle,
+                "type": comp.get("type", ""),
+                "code": comp.get("code", ""),
+                "libelle": comp.get("libelle", ""),
+            })
+
+    return competences
+
+
+def extract_rome_savoirs(profile: dict) -> list[dict]:
+    """
+    Extrait les savoirs d'une fiche métier ROME
+    dans un format simple exploitable par Héphaïstos.
+    """
+
+    savoirs = []
+
+    for groupe in profile.get("groupesSavoirs", []):
+        categorie = groupe.get("categorieSavoirs", {})
+        categorie_code = categorie.get("code", "")
+        categorie_libelle = categorie.get("libelle", "")
+
+        for savoir in groupe.get("savoirs", []):
+            savoirs.append({
+                "categorie_code": categorie_code,
+                "categorie": categorie_libelle,
+                "type": savoir.get("type", ""),
+                "code": savoir.get("code", ""),
+                "libelle": savoir.get("libelle", ""),
+            })
+
+    return savoirs
+
+
+def build_rome_job_reference(profile: dict) -> dict:
+    """
+    Construit une référence métier ROME simple et exploitable.
+
+    Sépare :
+    - les compétences ;
+    - les savoirs ;
+    - les certifications et habilitations.
+    """
+    if not profile:
+        return {
+            "code": "",
+            "libelle": "",
+            "competences": [],
+            "savoirs": [],
+            "certifications": [],
+        }
+
+    metier = profile.get("metier", {}) or {}
+
+    competences = extract_rome_competences(profile)
+    all_savoirs = extract_rome_savoirs(profile)
+
+    savoirs = []
+    certifications = []
+
+    for savoir in all_savoirs:
+        if savoir.get("categorie") == "Certifications et habilitations":
+            certifications.append(savoir)
+        else:
+            savoirs.append(savoir)
+
+    return {
+        "code": profile.get("code", "") or metier.get("code", ""),
+        "libelle": metier.get("libelle", ""),
+        "competences": competences,
+        "savoirs": savoirs,
+        "certifications": certifications,
+    }
+
+
 def extract_unique_rome_jobs(appellations: list[dict]) -> list[dict]:
     """
     Extrait les métiers ROME uniques à partir des appellations normalisées.
@@ -200,6 +352,8 @@ def extract_unique_rome_jobs(appellations: list[dict]) -> list[dict]:
             }
 
     return list(jobs.values())
+
+
 def search_unique_rome_jobs(query: str) -> list[dict]:
     """
     Recherche les métiers ROME uniques correspondant à une requête.
@@ -208,6 +362,7 @@ def search_unique_rome_jobs(query: str) -> list[dict]:
     appellations = normalize_rome_appellations(data)
 
     return extract_unique_rome_jobs(appellations)
+
 
 
 def test_rome_metiers_api():
@@ -232,9 +387,10 @@ def test_rome_metiers_api():
         params=params,
         timeout=15,
     )
+    if response.status_code == 429:
+        return {"resultats": []}
 
-    print("Status code :", response.status_code)
-    print("Headers :", dict(response.headers))
-    print("Body :", response.text)
+    response.raise_for_status()
+    return response.json()
 
-    return response
+
