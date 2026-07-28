@@ -13,6 +13,9 @@ from job_inference import (
     get_top_cv_families,
     infer_rome_jobs_from_terms,
     filter_rome_candidate_terms,
+    normalize_text,
+    rank_rome_jobs_against_cv,
+    rank_rome_candidate_terms
 )
 from offers_phase1 import fetch_offers_multi_queries
 from opportunity_rules import build_realistic_opportunity_summary
@@ -21,13 +24,16 @@ from location_helper import (
     format_commune_label,
     search_communes_geo_api,
 )
-from francetravail_api import get_access_token
-
+from francetravail_api import (
+    get_access_token,
+    get_rome_job_profile,
+    build_rome_job_reference,
+)
+from semantic_matching import evaluate_rome_reference
 
 st.set_page_config(page_title="Hephaistos", layout="wide")
 st.title("Hephaistos")
 st.write("Agent IA emploi – prototype")
-
 
 # =========================================================
 # SESSION STATE
@@ -159,6 +165,10 @@ def _normalize_local(text: str) -> str:
     text = re.sub(r"[^a-z0-9\s]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def normalize_text(text: str) -> str:
+    return _normalize_local(text)
 
 
 def remove_redundant_terms(terms: list[str]) -> list[str]:
@@ -894,7 +904,7 @@ if uploaded:
     topics = filter_rome_candidate_terms(topics)
 
     skills = topics_to_skills(topics)
-    
+
     sub_family = infer_sub_family(topics, direction_family)
 
     # ------------------------
@@ -914,13 +924,107 @@ if uploaded:
         main_job_label = main_job_data or "inconnu"
         domain_label = job_summary.get("domain", "inconnu")
 
-    rome_candidate_terms = filter_rome_candidate_terms(cv_terms_for_inference)
-    
-    rome_jobs = infer_rome_jobs_from_terms(
-        rome_candidate_terms,
+    rome_candidate_terms = filter_rome_candidate_terms(
+        cv_terms_for_inference
+    )
+
+    selected_rome_terms = rank_rome_candidate_terms(
+        terms=rome_candidate_terms,
         max_terms=5,
     )
 
+    # Le métier principal détecté est interrogé en priorité.
+    rome_search_terms = []
+
+    if main_job_label and main_job_label != "inconnu":
+        normalized_main_job = normalize_text(main_job_label)
+    normalized_cv = normalize_text(cv_text)
+
+    main_job_words = [
+        word
+        for word in normalized_main_job.split()
+        if len(word) >= 4
+    ]
+
+    matched_main_job_words = [
+        word
+        for word in main_job_words
+        if word in normalized_cv
+    ]
+
+    main_job_coverage = (
+        len(matched_main_job_words) / len(main_job_words)
+        if main_job_words
+        else 0.0
+    )
+
+    # Le métier principal historique n'est prioritaire
+    # que s'il est suffisamment visible dans le CV.
+    if main_job_coverage >= 0.6:
+        rome_search_terms.append(main_job_label)
+
+    for term in selected_rome_terms:
+        normalized_term = normalize_text(term)
+
+        if not normalized_term:
+            continue
+
+        already_present = any(
+            normalize_text(existing) == normalized_term
+            for existing in rome_search_terms
+        )
+
+        if not already_present:
+            rome_search_terms.append(term)
+
+    #with st.expander("Diagnostic ROME"):
+        #st.write(
+            #"Termes candidats — premiers :",
+            #rome_candidate_terms[:40],
+        #)
+
+        #st.write(
+            #"Termes sélectionnés :",
+            #selected_rome_terms,
+        #)
+
+        #st.write(
+            #"Requêtes ROME réellement envoyées :",
+            #rome_search_terms,
+        #)
+
+    rome_jobs = infer_rome_jobs_from_terms(
+        rome_search_terms,
+        max_terms=6,
+    )
+
+    rome_jobs = rank_rome_jobs_against_cv(
+        cv_text=cv_text,
+        rome_jobs=rome_jobs,
+        main_job_label=main_job_label,
+        domain_label=domain_label,
+        )
+
+    rome_reference = st.session_state.get("rome_reference", {})
+    cached_analysis = st.session_state.get("rome_visibility_analysis", {})
+    cached_cv_text = st.session_state.get("rome_visibility_cv_text", "")
+
+    if cached_cv_text != cv_text or not cached_analysis:
+        rome_visibility_analysis = evaluate_rome_reference(
+            cv_text=cv_text,
+            rome_reference=rome_reference,
+        )
+
+        st.session_state[
+            "rome_visibility_analysis"
+        ] = rome_visibility_analysis
+
+        st.session_state[
+            "rome_visibility_cv_text"
+        ] = cv_text
+
+    else:
+        rome_visibility_analysis = cached_analysis
     # ------------------------
     # Mots-clés suggérés
     # ------------------------
@@ -987,17 +1091,17 @@ if uploaded:
     # ------------------------
     # AFFICHAGE UI — ordre logique unique
     # ------------------------
-    with st.expander("Voir le texte extrait"):
-        st.write(cv_text)
+   # with st.expander("Voir le texte extrait"):
+        #st.write(cv_text)
 
-    st.markdown("### Métier principal détecté dans votre CV")
-    st.success(main_job_label.capitalize())
-    if rome_jobs:
-        st.markdown("### Métiers ROME candidats détectés")
-        for job in rome_jobs[:5]:
-            st.info(
-                f"{job.get('metier_code', '')} — {job.get('metier_libelle', '')}"
-            )
+    #st.markdown("### Métier principal détecté dans votre CV")
+    #st.success(main_job_label.capitalize())
+    #if rome_jobs:
+        #st.markdown("### Métiers ROME candidats détectés")
+        #for job in rome_jobs[:5]:
+            #st.info(
+                #f"{job.get('metier_code', '')} — {job.get('metier_libelle', '')}"
+            #)
 
     st.markdown("### Compétences et axes transférables détectés dans votre CV")
 
@@ -1008,122 +1112,99 @@ if uploaded:
     else:
         st.write("Aucun thème dominant détecté.")
 
-    if skills:
-        st.markdown("### Compétences dominantes estimées")
-        for skill in skills:
-            st.write(f"• {skill}")
+    #if skills:
+        #st.markdown("### Compétences dominantes estimées")
+        #for skill in skills:
+            #st.write(f"• {skill}")
     # =====================================================
-    # Choix de direction métier (utilisateur)
-    # =====================================================
-    if cv_families:
-        st.markdown("### Choisir une direction métier")
+# Choix de direction métier par l'utilisateur
+# =====================================================
 
-    detected_family = cv_families[0] if cv_families else None
+detected_family = cv_families[0] if cv_families else None
+
+if cv_families:
+    st.markdown("### Choisir une direction professionnelle")
+
     current_selected_family = st.session_state.get("selected_family")
 
+    # Si l'ancienne sélection n'existe plus dans le nouveau CV,
+    # on revient à la dominante détectée.
     if current_selected_family in cv_families:
         selected_index = cv_families.index(current_selected_family)
     else:
         selected_index = 0
 
-    selected_family = st.selectbox(
+    selected_family_ui = st.selectbox(
         "Tu peux garder la direction proposée ou en choisir une autre :",
         options=cv_families,
         index=selected_index,
+        format_func=display_family_label,
     )
 
-    st.session_state["selected_family"] = selected_family
-
-    st.caption(f"Dominante détectée dans le CV : {detected_family}")
-    st.caption(f"Direction actuellement choisie : {selected_family}")
-
-    secondary_labels = [display_family_label(f) for f in secondary_families]
-    if secondary_labels:
-        st.write("Ton CV montre aussi des éléments en :")
-        for label in secondary_labels:
-            st.write(f"- {label}")
-
-    st.write(
-        "Cette lecture signifie surtout que ton CV présente un axe principal, "
-        "mais aussi plusieurs compétences secondaires utiles selon "
-        "le poste visé."
-    )
-
-    if cv_families:
-        st.markdown("### Familles métier dominantes détectées")
-        for fam_label in format_family_labels(cv_families):
-            st.success(fam_label)
-
-        st.markdown("### Lecture de ton profil")
-    st.write(
-        f"Dominante détectée automatiquement : "
-        f"**{display_family_label(main_family)}**"
-    )
-
-    if has_user_override:
-        st.write(
-            f"Réorientation choisie : " f"**{display_family_label(selected_family)}**"
-        )
-    else:
-        st.write("Aucune réorientation choisie pour l’instant.")
-
-    if detected_families:
-        st.markdown(
-            "### Si cette dominante ne te convient pas, " "choisis une autre direction"
-        )
-        st.caption(
-            "Hephaistos te propose une direction principale, "
-            "mais tu peux l’ajuster selon ton objectif."
-        )
-
-        family_cols = st.columns(len(detected_families))
-        for i, family in enumerate(detected_families):
-            with family_cols[i]:
-                if st.button(
-                    display_family_label(family), key=f"family_btn_{family}_{i}"
-                ):
-                    st.session_state["selected_family"] = family
-
-    # recalcul après clic possible
-    selected_family = st.session_state.get("selected_family")
-    if selected_family == main_family:
+    # La dominante automatique n'est pas considérée
+    # comme une réorientation choisie par l'utilisateur.
+    if selected_family_ui == detected_family:
         st.session_state["selected_family"] = None
         selected_family = None
-
-    has_user_override = selected_family is not None
-    direction_family = selected_family if has_user_override else main_family
-    sub_family = infer_sub_family(topics, direction_family)
-
-    if has_user_override:
-        st.write(
-            f"Direction retenue pour l’analyse : "
-            f"**{display_family_label(direction_family)}**"
-        )
     else:
+        st.session_state["selected_family"] = selected_family_ui
+        selected_family = selected_family_ui
+
+    st.caption(
+        "Direction proposée à partir du CV : "
+        f"{display_family_label(detected_family)}"
+    )
+
+    secondary_labels = [
+        display_family_label(family)
+        for family in cv_families[1:]
+    ]
+
+    if secondary_labels:
         st.write(
-            f"Analyse actuellement basée sur la dominante détectée : "
-            f"**{display_family_label(main_family)}**"
+            "Ton CV présente également des éléments utiles dans les "
+            "directions suivantes :"
         )
 
-    st.markdown("### Analyse métier du CV")
-    st.write(f"Métier principal estimé : {main_job_label}")
-    st.write(f"Domaine : {domain_label}")
-    st.write(f"Sous-famille détectée : **{sub_family}**")
+        for label in secondary_labels:
+            st.write(f"• {label}")
 
+else:
+    selected_family = None
+
+    if uploaded is not None:
+        st.info(
+            "Aucune direction professionnelle suffisamment claire "
+            "n'a été détectée dans le CV."
+        )
+
+# =====================================================
+# Direction utilisée par le moteur
+# =====================================================
+
+has_user_override = selected_family is not None
+
+direction_family = (
+    selected_family
+    if has_user_override
+    else main_family
+)
+
+sub_family = infer_sub_family(
+    topics,
+    direction_family,
+)
+
+if has_user_override:
+    st.caption(
+        "La recherche sera orientée vers : "
+        f"{display_family_label(direction_family)}"
+    )
     secondary_family = cv_families[1] if len(cv_families) > 1 else None
     if secondary_family:
         st.write(
             "Profil secondaire détecté : " f"{display_family_label(secondary_family)}"
         )
-
-    if related_jobs:
-        st.write("Métiers proches :")
-        for job in related_jobs:
-            if isinstance(job, dict):
-                st.write(f"• {job.get('job', 'inconnu')}")
-            else:
-                st.write(f"• {job}")
-
 
 # =========================================================
 # 2) PHASE 1 — TROUVER DES OFFRES

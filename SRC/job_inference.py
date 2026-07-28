@@ -3,13 +3,9 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 from francetravail_api import search_unique_rome_jobs
-from francetravail_api import (
-    get_rome_job_profile,
-    build_rome_job_reference,
-)
 
 
 # =========================================================
@@ -17,539 +13,209 @@ from francetravail_api import (
 # =========================================================
 
 STOPWORDS = {
-    "de", "des", "du", "la", "le", "les", "un", "une", "et", "ou", "en", "au", "aux",
-    "pour", "par", "avec", "sans", "sur", "sous", "dans", "chez", "vers", "entre",
-    "a", "à", "d", "l", "the", "and", "of", "to", "in", "on", "as",
-    "vos", "nos", "ses", "leur", "leurs", "son", "sa",
-    "ce", "cet", "cette", "ces", "qui", "que", "quoi", "dont",
-    "est", "sont", "etre", "être", "avoir", "faire", "plus", "moins",
-    "mission", "missions", "poste", "profil", "candidat", "candidature",
-    "entreprise", "societe", "société", "structure", "service", "equipe", "équipe",
-    "travail", "emploi", "experience", "expérience", "competence", "compétence",
-    "formation", "projet", "projets", "activite", "activité", "annee", "année",
+    "a", "à", "au", "aux", "avec", "ce", "ces", "cet", "cette",
+    "chez", "d", "dans", "de", "des", "dont", "du", "elle", "en",
+    "entre", "et", "eux", "il", "ils", "je", "la", "le", "les",
+    "leur", "leurs", "l", "lui", "ma", "mais", "me", "mes", "mon",
+    "ne", "nos", "notre", "nous", "on", "ou", "par", "pas", "plus",
+    "pour", "qu", "que", "qui", "quoi", "sa", "sans", "se", "ses",
+    "son", "sous", "sur", "ta", "te", "tes", "the", "to", "ton",
+    "tu", "un", "une", "vers", "vos", "votre", "vous",
+    "activite", "activites", "annee", "annees", "candidat", "candidature",
+    "competence", "competences", "emploi", "entreprise", "equipe",
+    "experience", "experiences", "faire", "formation", "mission", "missions",
+    "poste", "profil", "projet", "projets", "service", "societe", "structure",
+    "travail",
+}
+
+GENERIC_ROME_WORDS = {
+    "actuellement", "annee", "annees", "candidature", "compatible",
+    "curriculum", "emploi", "etude", "etudes", "etudiant", "etudiante",
+    "experience", "experiences", "mention", "partiel", "poste", "profil",
+    "recherche", "rechercher", "temps", "vitae",
+}
+
+CONNECTOR_WORDS = {
+    "a", "au", "aux", "avec", "de", "des", "du", "en", "et", "je",
+    "la", "le", "les", "ma", "mes", "mon", "pour", "sur", "un", "une",
 }
 
 
 def strip_accents(text: str) -> str:
     return "".join(
-        c for c in unicodedata.normalize("NFKD", text or "")
-        if not unicodedata.combining(c)
+        char
+        for char in unicodedata.normalize("NFKD", text or "")
+        if not unicodedata.combining(char)
     )
 
 
 def normalize_text(text: str) -> str:
-    text = (text or "").lower()
-    text = strip_accents(text)
-    text = re.sub(r"[-'’/]", " ", text)
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    """Normalise un texte pour les comparaisons lexicales."""
+    normalized = strip_accents(str(text or "")).lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return " ".join(normalized.split())
 
 
-def tokenize(text: str) -> List[str]:
-    norm = normalize_text(text)
-    tokens = []
-    for tok in norm.split():
-        if len(tok) < 3:
-            continue
-        if tok in STOPWORDS:
-            continue
-        if tok.isdigit():
-            continue
-        tokens.append(tok)
-    return tokens
+def _meaningful_words(text: str, min_len: int = 3) -> List[str]:
+    return [
+        word
+        for word in normalize_text(text).split()
+        if len(word) >= min_len and word not in STOPWORDS
+    ]
+
+
+def _dedupe_keep_order(values: Iterable[str]) -> List[str]:
+    result: List[str] = []
+    seen = set()
+
+    for value in values:
+        clean = " ".join(str(value or "").split())
+        key = normalize_text(clean)
+        if clean and key and key not in seen:
+            seen.add(key)
+            result.append(clean)
+
+    return result
 
 
 # =========================================================
 # FAMILLES METIER
 # =========================================================
 
-ACTIVITY_FAMILY_SIGNALS: Dict[str, Dict[str, List[str]]] = {
-    "administratif_gestion": {
-        "strong_signals": [
-            "assistant administratif", "agent administratif", "gestion administrative",
-            "secretariat", "secrétariat", "classement", "archivage", "bureautique",
-            "saisie", "facturation", "gestion documentaire", "courrier"
-        ],
-        "context_signals": [
-            "planning", "organisation", "coordination", "suivi", "dossier", "dossiers",
-            "tableau", "excel", "word", "outlook", "reporting"
-        ],
+# Référentiel interne volontairement généraliste. Il sert à produire une
+# première hypothèse ; ROME et le contenu réel du CV doivent ensuite l'affiner.
+FAMILY_KEYWORDS: Dict[str, set[str]] = {
+    "Administratif & Gestion": {
+        "administratif", "administration", "agenda", "archive", "assistant",
+        "bureautique", "comptabilite", "courrier", "dossier", "facturation",
+        "gestion", "planning", "secretariat", "tableur",
     },
-    "relation_client_accueil": {
-        "strong_signals": [
-            "accueil", "agent d accueil", "charge d accueil", "relation client",
-            "service client", "support client", "conseiller client"
-        ],
-        "context_signals": [
-            "telephone", "téléphone", "public", "usagers", "visiteurs", "client", "clients"
-        ],
+    "Relation Client & Accueil": {
+        "accueil", "client", "conseil", "contact", "caisse", "commercial",
+        "information", "public", "reclamation", "relation", "renseigner",
+        "vente", "visiteur",
     },
-    "communication_marketing": {
-        "strong_signals": [
-            "communication", "communication digitale", "communication numerique",
-            "communication numérique", "community manager", "reseaux sociaux",
-            "réseaux sociaux", "creation de contenu", "création de contenu",
-            "redaction web", "rédaction web", "newsletter", "marketing"
-        ],
-        "context_signals": [
-            "site internet", "web", "digital", "contenu", "media", "média",
-            "campagne", "visibilite", "visibilité"
-        ],
+    "Production": {
+        "assemblage", "conditionnement", "controle", "fabrication", "ligne",
+        "machine", "operateur", "production", "qualite", "reglage",
     },
-    "creation_artistique": {
-        "strong_signals": [
-            "mediation culturelle", "médiation culturelle", "projet culturel",
-            "culturel", "culturelle", "patrimoine", "musee", "musée",
-            "exposition", "creation", "création", "artistique"
-        ],
-        "context_signals": [
-            "animation", "publics", "visite", "visites", "culture", "diffusion"
-        ],
+    "Maintenance": {
+        "depannage", "diagnostic", "entretien", "installation", "maintenance",
+        "mecanique", "preventif", "reparation", "technique",
     },
-    "analyse_pilotage": {
-        "strong_signals": [
-            "analyse", "pilotage", "coordination", "gestion de projet",
-            "chef de projet", "indicateur", "indicateurs", "kpi", "reporting"
-        ],
-        "context_signals": [
-            "tableau de bord", "budget", "suivi", "planification", "organisation"
-        ],
+    "Logistique & Stock": {
+        "approvisionnement", "commande", "expedition", "inventaire", "livraison",
+        "logistique", "magasin", "preparation", "reception", "stock",
     },
-    "vente_commerce": {
-        "strong_signals": [
-            "vente", "commercial", "commerciale", "relation commerciale",
-            "conseil client", "prospection", "negociation", "négociation"
-        ],
-        "context_signals": [
-            "client", "clients", "offre", "produit", "service", "services"
-        ],
+    "Communication & Marketing": {
+        "communication", "contenu", "digital", "editorial", "marketing",
+        "media", "numerique", "reseaux", "seo", "social",
     },
-    "logistique": {
-        "strong_signals": [
-            "logistique", "stock", "gestion de stock", "gestion des stocks",
-            "magasin", "reception", "réception", "expedition", "expédition",
-            "preparation de commandes", "préparation de commandes"
-        ],
-        "context_signals": [
-            "inventaire", "approvisionnement", "entrepot", "entrepôt", "flux"
-        ],
+    "Analyse & Pilotage": {
+        "analyse", "data", "donnees", "indicateur", "pilotage", "reporting",
+        "statistique", "tableau", "veille",
     },
-    "production": {
-        "strong_signals": [
-            "production", "fabrication", "assemblage", "chaine", "chaîne",
-            "atelier", "conditionnement"
-        ],
-        "context_signals": [
-            "machine", "machines", "cadence", "qualite", "qualité"
-        ],
+    "Informatique & Numérique": {
+        "application", "code", "developpement", "git", "html", "informatique",
+        "javascript", "python", "sql", "streamlit", "web",
     },
-    "maintenance": {
-        "strong_signals": [
-            "maintenance", "depannage", "dépannage", "reparation", "réparation",
-            "technique", "installation", "equipement", "équipement"
-        ],
-        "context_signals": [
-            "diagnostic", "panne", "materiel", "matériel", "controle"
-        ],
+    "Pédagogie & Formation": {
+        "accompagnement", "animation", "apprenant", "cours", "enseignement",
+        "formateur", "formation", "pedagogie", "tuteur",
     },
-    "sante_soin": {
-        "strong_signals": [
-            "soin", "sante", "santé", "medical", "médical",
-            "aide soignant", "aide-soignant", "infirmier", "infirmiere",
-            "secretaire medical", "secrétaire médical"
-        ],
-        "context_signals": [
-            "patient", "patients", "hospitalier", "clinique", "accompagnement"
-        ],
-    },
-    "social_accompagnement": {
-        "strong_signals": [
-            "accompagnement", "social", "educatif", "éducatif",
-            "insertion", "aes", "medico social", "médico social"
-        ],
-        "context_signals": [
-            "publics fragiles", "beneficiaires", "bénéficiaires", "suivi social"
-        ],
-    },
-    "pedagogie_formation": {
-        "strong_signals": [
-            "formation", "pedagogie", "pédagogie", "enseignement",
-            "transmission", "animateur formation", "formateur"
-        ],
-        "context_signals": [
-            "atelier", "apprenants", "cours", "animation"
-        ],
-    },
-    "securite_protection": {
-        "strong_signals": [
-            "securite", "sécurité", "surveillance", "protection", "controle d acces",
-            "contrôle d accès", "prevention", "prévention"
-        ],
-        "context_signals": [
-            "site", "incendie", "rondes", "consignes"
-        ],
-    },
-    "hotellerie_restauration": {
-        "strong_signals": [
-            "restauration", "service en salle", "cuisine", "hotel", "hôtel",
-            "hebergement", "hébergement", "reception hotel", "réception hôtel"
-        ],
-        "context_signals": [
-            "client", "clients", "service", "accueil"
-        ],
+    "Culture & Création": {
+        "art", "artistique", "concert", "culture", "musee", "musique",
+        "orchestre", "patrimoine", "spectacle", "violon",
     },
 }
 
 
 JOB_FAMILY_TO_ROLES: Dict[str, List[Tuple[str, str]]] = {
-    "administratif_gestion": [
+    "Administratif & Gestion": [
         ("assistant administratif", "administratif"),
-        ("agent administratif", "administratif"),
-        ("assistant de gestion", "administratif"),
-        ("assistant polyvalent", "administratif"),
+        ("assistant de gestion", "gestion"),
+        ("secrétaire", "administratif"),
     ],
-    "relation_client_accueil": [
+    "Relation Client & Accueil": [
         ("agent d'accueil", "relation client"),
-        ("chargé d'accueil", "relation client"),
-        ("conseiller client", "relation client"),
-        ("support client", "relation client"),
+        ("conseiller clientèle", "relation client"),
+        ("employé commercial", "commerce"),
     ],
-    "communication_marketing": [
-        ("chargé de communication", "communication"),
-        ("chargé de communication digitale", "communication"),
-        ("community manager", "communication"),
-        ("créateur de contenu", "communication"),
-        ("rédacteur web", "communication"),
+    "Production": [
+        ("agent de production", "industrie"),
+        ("opérateur de fabrication", "industrie"),
+        ("agent de conditionnement", "industrie"),
     ],
-    "creation_artistique": [
-        ("médiation culturelle", "culture"),
-        ("chargé de projet culturel", "culture"),
-        ("assistant culturel", "culture"),
-        ("chargé de diffusion", "culture"),
-    ],
-    "analyse_pilotage": [
-        ("chargé de projet", "pilotage"),
-        ("chef de projet", "pilotage"),
-        ("coordinateur", "pilotage"),
-        ("analyste", "analyse"),
-    ],
-    "vente_commerce": [
-        ("assistant commercial", "commerce"),
-        ("conseiller de vente", "commerce"),
-        ("commercial", "commerce"),
-        ("chargé de relation client", "commerce"),
-    ],
-    "logistique": [
-        ("agent logistique", "logistique"),
-        ("gestionnaire de stock", "logistique"),
-        ("magasinier", "logistique"),
-        ("préparateur de commandes", "logistique"),
-    ],
-    "production": [
-        ("agent de production", "production"),
-        ("opérateur de fabrication", "production"),
-        ("agent de conditionnement", "production"),
-    ],
-    "maintenance": [
+    "Maintenance": [
         ("technicien de maintenance", "maintenance"),
-        ("agent technique", "maintenance"),
-        ("technicien d'installation", "maintenance"),
+        ("agent de maintenance", "maintenance"),
     ],
-    "sante_soin": [
-        ("aide-soignant", "santé"),
-        ("secrétaire médical", "santé"),
-        ("assistant médical", "santé"),
-        ("agent de service hospitalier", "santé"),
+    "Logistique & Stock": [
+        ("agent logistique", "logistique"),
+        ("préparateur de commandes", "logistique"),
+        ("gestionnaire de stock", "logistique"),
     ],
-    "social_accompagnement": [
-        ("accompagnant éducatif et social", "social"),
-        ("intervenant social", "social"),
-        ("assistant socio-éducatif", "social"),
+    "Communication & Marketing": [
+        ("chargé de communication", "communication"),
+        ("chargé de communication digitale", "communication digitale"),
+        ("créateur de contenu", "communication"),
     ],
-    "pedagogie_formation": [
+    "Analyse & Pilotage": [
+        ("analyste de données", "analyse de données"),
+        ("chargé de reporting", "pilotage"),
+    ],
+    "Informatique & Numérique": [
+        ("développeur web", "informatique"),
+        ("développeur Python", "informatique"),
+        ("concepteur de solutions numériques", "numérique"),
+    ],
+    "Pédagogie & Formation": [
         ("formateur", "formation"),
         ("animateur pédagogique", "formation"),
-        ("chargé de formation", "formation"),
     ],
-    "securite_protection": [
-        ("agent de sécurité", "sécurité"),
-        ("agent de surveillance", "sécurité"),
-    ],
-    "hotellerie_restauration": [
-        ("agent de restauration", "restauration"),
-        ("employé polyvalent de restauration", "restauration"),
-        ("réceptionniste", "hôtellerie"),
+    "Culture & Création": [
+        ("musicien", "culture"),
+        ("médiateur culturel", "culture"),
+        ("chargé de projet culturel", "culture"),
     ],
 }
 
 
-# =========================================================
-# DETECTION DES FAMILLES
-# =========================================================
+def get_top_cv_families(
+    cv_terms: Sequence[str] | str,
+    top_n: int = 5,
+) -> List[str]:
+    """Détecte les familles dominantes à partir du texte ou des termes du CV."""
+    if isinstance(cv_terms, str):
+        source_text = cv_terms
+    else:
+        source_text = " ".join(str(term) for term in (cv_terms or []))
 
-def _count_family_signals(cv_text: str) -> Dict[str, int]:
-    text_norm = normalize_text(cv_text)
-    token_counts = Counter(tokenize(cv_text))
+    words = _meaningful_words(source_text)
+    counts = Counter(words)
+    scored: List[Tuple[str, int]] = []
 
-    family_scores: Dict[str, int] = {}
+    for family, keywords in FAMILY_KEYWORDS.items():
+        score = sum(counts.get(keyword, 0) for keyword in keywords)
+        if score > 0:
+            scored.append((family, score))
 
-    for family, signals in ACTIVITY_FAMILY_SIGNALS.items():
-        score = 0
-
-        for phrase in signals.get("strong_signals", []):
-            phrase_norm = normalize_text(phrase)
-            if phrase_norm and phrase_norm in text_norm:
-                score += 5
-
-        for phrase in signals.get("context_signals", []):
-            phrase_norm = normalize_text(phrase)
-            if not phrase_norm:
-                continue
-
-            if " " in phrase_norm:
-                if phrase_norm in text_norm:
-                    score += 2
-            else:
-                score += token_counts.get(phrase_norm, 0)
-
-        family_scores[family] = score
-
-    return family_scores
-
-
-def get_top_cv_families(cv_text: str, top_n: int = 3) -> List[str]:
-    """
-    Retourne les familles métier les plus probables à partir du CV.
-    """
-    scores = _count_family_signals(cv_text)
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-
-    results = []
-    for family, score in ranked:
-        if score <= 0:
-            continue
-        results.append(family)
-        if len(results) >= top_n:
-            break
-
-    return results
-def filter_rome_candidate_terms(terms: List[str]) -> List[str]:
-    """
-    Construit des expressions métier pertinentes à partir des termes du CV.
-
-    Priorité :
-    1. expressions de 2 ou 3 mots ;
-    2. termes professionnels isolés ;
-    3. suppression des coordonnées, rubriques et éléments parasites.
-    """
-
-    blacklist = {
-        "besoin", "besoins", "concret", "concrete",
-        "mission", "missions", "activite", "activites",
-        "experience", "experiences",
-        "competence", "competences",
-        "telephone", "email", "adresse",
-        "identite", "professionnelle", "professionnel",
-        "profil", "contact", "coordonnees",
-        "depuis", "plus", "vingt", "parcours",
-        "autour", "meme","besoin", "besoins", "concret", "concrete",
-        "mission", "missions", "activite", "activites",
-        "experience", "experiences",
-        "competence", "competences",
-        "telephone", "email", "mail", "adresse",
-        "identite", "professionnelle", "professionnel",
-        "profil", "contact", "coordonnees",
-        "depuis", "plus", "vingt", "parcours",
-        "autour", "meme",
-        "entrepreneur", "independant", "independante",
-        "toulouse","parcours",
-        "parcours",
-        "savoir-faire",
-        "formation",
-        "formations",
-        "candidature",
-        "poste",
-        "universite",
-        "université",
-    }
-
-    connectors = {
-        "de", "du", "des", "d", "en", "et", "a", "au",
-    }
-
-    separators = {
-        "•", "-", "|", "/", "–", "—",
-    }
-
-    segments: List[List[str]] = []
-    current_segment: List[str] = []
-
-    for term in terms:
-        original = str(term).strip()
-
-        if not original:
-            continue
-
-        if original in separators:
-            if current_segment:
-                segments.append(current_segment)
-                current_segment = []
-            continue
-
-        clean = normalize_text(original)
-
-        if not clean:
-            continue
-
-        # Les titres entièrement en majuscules sont généralement
-        # des rubriques, des noms ou des éléments administratifs.
-        if original.isupper() and len(original) > 2:
-            continue
-
-        if clean in blacklist:
-            continue
-
-        if clean.isdigit():
-            continue
-
-        if "@" in original:
-            continue
-
-        current_segment.append(original)
-
-    if current_segment:
-        segments.append(current_segment)
-
-    candidates: List[str] = []
-    seen = set()
-
-    def add_candidate(words: List[str]) -> None:
-        phrase = " ".join(words).strip()
-        normalized = normalize_text(phrase)
-        normalized_words = normalized.split()
-
-        if not normalized_words:
-            return
-
-        if normalized_words[0] in connectors:
-            return
-
-        if normalized_words[-1] in connectors:
-            return
-
-        meaningful_words = [
-            word
-            for word in normalized.split()
-            if word not in connectors
-            and word not in blacklist
-            and len(word) >= 3
-        ]
-
-        if not normalized:
-            return
-
-        if not meaningful_words:
-            return
-
-        if normalized in seen:
-            return
-
-        seen.add(normalized)
-        candidates.append(phrase)
-
-    # Expressions métier : trois mots puis deux mots.
-    for segment in segments:
-        for size in (3, 2):
-            if len(segment) < size:
-                continue
-
-            for index in range(len(segment) - size + 1):
-                add_candidate(segment[index:index + size])
-
-    # Termes isolés en dernier recours.
-    for segment in segments:
-        for term in segment:
-            clean = normalize_text(term)
-
-            if clean in connectors:
-                continue
-
-            if clean in blacklist:
-                continue
-
-            if len(clean) < 4:
-                continue
-
-            add_candidate([term])
-
-    return candidates
-def infer_rome_jobs_from_terms(
-    cv_terms: List[str],
-    max_terms: int = 5,
-) -> List[Dict[str, str]]:
-    """
-    Recherche des métiers ROME à partir des termes détectés dans le CV
-    puis les classe selon le nombre de termes du CV qui convergent vers eux.
-    """
-
-    rome_jobs: Dict[str, Dict] = {}
-
-    for term in cv_terms[:max_terms]:
-
-        query = str(term).strip()
-
-        if not query:
-            continue
-
-        jobs = search_unique_rome_jobs(query)
-
-        for job in jobs:
-
-            code = job.get("metier_code")
-
-            if not code:
-                continue
-
-            if code not in rome_jobs:
-
-                rome_jobs[code] = {
-                    **job,
-                    "matched_terms": set(),
-                    "term_score": 0,
-                }
-
-            rome_jobs[code]["matched_terms"].add(query)
-            rome_jobs[code]["term_score"] = len(
-                rome_jobs[code]["matched_terms"]
-            )
-
-    results = list(rome_jobs.values())
-
-    results.sort(
-        key=lambda j: (
-            -j["term_score"],
-            j["metier_libelle"],
-        )
-    )
-
-    return results
+    scored.sort(key=lambda item: (-item[1], item[0]))
+    return [family for family, _ in scored[:top_n]]
 
 
 # =========================================================
-# INFERENCE METIER
+# INFERENCE METIER INTERNE
 # =========================================================
+
 
 def build_job_inference_summary(
     detected_families: List[str],
     cv_terms: List[str],
-    top_n: int = 3
+    top_n: int = 3,
 ) -> Dict[str, object]:
-    """
-    Construit un résumé métier simple et robuste à partir des familles détectées.
-    """
-    families = detected_families[:top_n] if detected_families else []
-
+    """Construit une première synthèse métier à partir des familles détectées."""
+    families = (detected_families or [])[:top_n]
     ranked_jobs: List[Dict[str, str]] = []
 
     for family in families:
@@ -559,217 +225,523 @@ def build_job_inference_summary(
                 "domain": domain,
                 "family": family,
             })
-                # ---------------------------------------------------------
-    # Priorité métier : musique / violon / orchestre
-    # Corrige le biais "formation générique" quand le CV est
-    # clairement artistique avec une composante pédagogique.
-    # ---------------------------------------------------------
-    cv_terms_lower = {str(term).strip().lower() for term in cv_terms if str(term).strip()}
 
-    music_markers = {
-        "violon", "violoniste", "musique", "orchestre", "conservatoire",
-        "chambre", "cpes", "musicolus", "acadomia"
-    }
-
-    music_hits = sum(1 for marker in music_markers if marker in cv_terms_lower)
-
-    if music_hits >= 3:
-        prioritized_music_jobs = [
-            {"job": "professeur de violon", "domain": "culture", "family": "culture"},
-            {"job": "violoniste", "domain": "culture", "family": "culture"},
-            {"job": "musicien d'orchestre", "domain": "culture", "family": "culture"},
-            {"job": "intervenant musique", "domain": "culture", "family": "culture"},
-            {"job": "animation musicale", "domain": "culture", "family": "culture"},
-        ]
-
-        existing_keys = {
-            (
-                str(job.get("job", "")).strip().lower(),
-                str(job.get("domain", "")).strip().lower()
-            )
-            for job in ranked_jobs
-            if isinstance(job, dict)
-        }
-
-        music_jobs_to_add = []
-        for job in prioritized_music_jobs:
-            key = (
-                str(job.get("job", "")).strip().lower(),
-                str(job.get("domain", "")).strip().lower()
-            )
-            if key not in existing_keys:
-                music_jobs_to_add.append(job)
-
-        ranked_jobs = music_jobs_to_add + ranked_jobs
-
-    main_job = ranked_jobs[0] if ranked_jobs else {"job": "inconnu", "domain": "inconnu", "family": ""}
-    related_jobs = ranked_jobs[1:4] if len(ranked_jobs) > 1 else []
+    main_job = (
+        ranked_jobs[0]
+        if ranked_jobs
+        else {"job": "inconnu", "domain": "inconnu", "family": ""}
+    )
 
     return {
         "main_job": main_job,
-        "related_jobs": related_jobs,
+        "related_jobs": ranked_jobs[1:4],
         "families_used": families,
         "ranked_jobs": ranked_jobs,
         "domain": main_job.get("domain", "inconnu"),
     }
 
 
-# =========================================================
-# REQUETES DE RECHERCHE
-# =========================================================
-
 def build_search_queries_from_job_summary(
     job_summary: Dict[str, object],
     topics: List[str],
-    max_queries: int = 5
+    max_queries: int = 5,
 ) -> List[str]:
-    """
-    Génère des requêtes de recherche à partir du résumé métier.
-    On privilégie :
-    1. métier principal
-    2. métiers proches
-    3. quelques topics utiles si besoin
-    """
+    """Génère les requêtes d'offres à partir du résumé métier."""
     queries: List[str] = []
-    seen = set()
-
-    def add_query(value: str) -> None:
-        q = " ".join(str(value).strip().split())
-        key = q.lower()
-        if q and key not in seen:
-            seen.add(key)
-            queries.append(q)
 
     main_job = job_summary.get("main_job", {})
     related_jobs = job_summary.get("related_jobs", [])
 
     if isinstance(main_job, dict):
-        add_query(main_job.get("job", ""))
-        add_query(main_job.get("domain", ""))
+        queries.extend([
+            str(main_job.get("job", "")),
+            str(main_job.get("domain", "")),
+        ])
 
     for item in related_jobs:
         if isinstance(item, dict):
-            add_query(item.get("job", ""))
+            queries.append(str(item.get("job", "")))
 
-    # fallback avec topics si trop peu de requêtes
-    for topic in topics[:5]:
-        if len(queries) >= max_queries:
-            break
-        add_query(topic)
+    queries.extend(str(topic) for topic in (topics or [])[:5])
+    return _dedupe_keep_order(queries)[:max_queries]
 
-    return queries[:max_queries]
 
-def compare_cv_to_rome_reference(
-    cv_text: str,
-    rome_reference: Dict
-) -> Dict[str, List[Dict]]:
+# =========================================================
+# TERMES CANDIDATS ROME
+# =========================================================
+
+
+def filter_rome_candidate_terms(terms: List[str]) -> List[str]:
     """
-    Compare le texte brut du CV aux compétences et savoirs ROME.
+    Nettoie les expressions candidates avant leur classement ROME.
 
-    Classe les éléments en deux groupes :
-    - présents dans le CV ;
-    - non repérés dans le CV.
-
-    Cette première version repose sur une correspondance lexicale simple.
+    La fonction reste volontairement généraliste : elle retire surtout les
+    coordonnées, rubriques, phrases administratives et expressions sans signal.
     """
+    blacklist = {
+        "adresse", "candidature", "contact", "coordonnees", "curriculum",
+        "email", "identite", "mail", "parcours", "poste", "profil",
+        "professionnel", "professionnelle", "savoir faire", "telephone", "vitae",
+    }
 
-    normalized_cv = normalize_text(cv_text or "")
+    candidates: List[str] = []
 
-    present = []
-    missing = []
+    for term in terms or []:
+        original = " ".join(str(term or "").strip().split())
+        normalized = normalize_text(original)
 
-    reference_items = (
-        rome_reference.get("competences", [])
-        + rome_reference.get("savoirs", [])
-    )
-
-    for item in reference_items:
-        libelle = item.get("libelle", "")
-        normalized_label = normalize_text(libelle)
-
-        if not normalized_label:
+        if not normalized or normalized in blacklist:
+            continue
+        if "@" in original:
+            continue
+        if re.fullmatch(r"[\d\s()+.,/-]+", original):
             continue
 
-        label_terms = [
+        meaningful = [
             word
-            for word in normalized_label.split()
-            if len(word) >= 4
+            for word in normalized.split()
+            if len(word) >= 3
+            and word not in CONNECTOR_WORDS
+            and word not in GENERIC_ROME_WORDS
+            and word not in STOPWORDS
         ]
 
-        matched_terms = [
-            word
-            for word in label_terms
-            if word in normalized_cv
-        ]
+        if meaningful:
+            candidates.append(original)
 
-        coverage = (
-            len(matched_terms) / len(label_terms)
-            if label_terms
-            else 0
-        )
+    return _dedupe_keep_order(candidates)
 
-        result_item = {
-            **item,
-            "matched_terms": matched_terms,
-            "coverage": round(coverage, 2),
-        }
 
-        if coverage >= 0.5:
-            present.append(result_item)
-        else:
-            missing.append(result_item)
+def rank_rome_candidate_terms(
+    terms: List[str],
+    max_terms: int = 5,
+) -> List[str]:
+    """
+    Classe les termes réellement extraits du CV avant interrogation de ROME.
 
-    present.sort(
-        key=lambda item: item.get("coverage", 0),
-        reverse=True,
-    )
-
-    missing.sort(
-        key=lambda item: item.get("coverage", 0),
-        reverse=True,
-    )
-
-    return {
-        "present": present,
-        "missing": missing,
-    }
-if __name__ == "__main__":
-    cv_text = """
-    Gestion administrative de dossiers.
-    Organisation de réunions.
-    Rédaction de comptes rendus.
-    Mise à jour de bases de données.
-    Accueil et renseignement du public.
-    Utilisation des outils bureautiques.
+    La fonction ne fabrique aucune expression nouvelle.
+    Elle privilégie les termes professionnels visibles dans le CV
+    et écarte les noms, coordonnées, rubriques et qualités trop générales.
     """
 
-    profile = get_rome_job_profile("M1607")
-    reference = build_rome_job_reference(profile)
+    noise_words = {
+        # Présentation et recherche d'emploi
+        "actuellement", "candidature", "compatible",
+        "curriculum", "emploi", "poste", "profil",
+        "recherche", "rechercher", "temps", "partiel", "vitae",
 
-    comparison = compare_cv_to_rome_reference(
-        cv_text=cv_text,
-        rome_reference=reference,
+        # Études et rubriques génériques
+        "annee", "annees", "baccalaureat", "certificat",
+        "cursus", "cycle", "diplome", "diplomes",
+        "equivalence", "etude", "etudes",
+        "etudiant", "etudiante", "formation",
+        "langue", "langues", "mention", "niveau",
+
+        # Coordonnées et fichiers
+        "adresse", "email", "mail", "telephone",
+        "pdf", "doc", "docx",
+
+        # Qualités personnelles générales
+        "adaptable", "dynamique", "ecoute", "esprit",
+        "organisation", "ponctualite",
+        "reactif", "rigueur", "sens",
+
+        # Termes narratifs
+        "centre", "construire", "disposant",
+        "durablement", "pratique", "souhaite",
+        "tres", "bien", "aujourdhui",
+
+        # Langues
+        "francais", "anglais","lecoute",
+    }
+
+    connector_words = {
+        "avec", "dans", "de", "des", "du",
+        "elle", "en", "est", "et", "je",
+        "la", "le", "les", "ma", "mes",
+        "mon", "pour", "sur", "une", "un",
+    }
+
+    professional_suffixes = (
+        "iste",
+        "eur",
+        "euse",
+        "teur",
+        "trice",
     )
 
-    print("Compétences présentes :", len(comparison["present"]))
-    print("Compétences non repérées :", len(comparison["missing"]))
+    prepared = []
+    frequencies: Dict[str, int] = {}
 
-    print("\nPrésentes :")
-    for item in comparison["present"][:10]:
-        print(
-            item["coverage"],
-            "-",
-            item["libelle"],
-            "- termes trouvés :",
-            item["matched_terms"],
+    # Première passe : normalisation et comptage
+    for term in terms:
+        original = str(term).strip()
+        normalized = normalize_text(original)
+
+        if not normalized:
+            continue
+
+        frequencies[normalized] = frequencies.get(normalized, 0) + 1
+
+    # Deuxième passe : sélection et score
+    for position, term in enumerate(terms):
+        original = str(term).strip()
+        normalized = normalize_text(original)
+
+        if not normalized:
+            continue
+
+        if normalized in noise_words:
+            continue
+
+        if normalized in connector_words:
+            continue
+
+        if len(normalized) < 4:
+            continue
+
+        if any(char.isdigit() for char in normalized):
+            continue
+
+        if "@" in original:
+            continue
+
+        # Nom de famille probable en majuscules.
+        # On conserve toutefois les intitulés professionnels,
+        # par exemple VIOLONISTE.
+        if (
+            original.isupper()
+            and not normalized.endswith(professional_suffixes)
+            and frequencies.get(normalized, 0) == 1
+        ):
+            continue
+
+        # Nom propre ou lieu probable :
+        # mot isolé avec majuscule, non répété et sans signal métier.
+        if (
+            original[:1].isupper()
+            and not original.isupper()
+            and not normalized.endswith(professional_suffixes)
+            and frequencies.get(normalized, 0) == 1
+        ):
+            continue
+
+        score = 0.0
+
+        # Répétition dans le CV
+        score += frequencies.get(normalized, 0) * 8
+
+        # Le début du CV reste prioritaire
+        if position < 10:
+            score += 20
+        elif position < 25:
+            score += 10
+        elif position < 50:
+            score += 5
+
+        # Intitulé professionnel probable
+        if normalized.endswith(professional_suffixes):
+            score += 20
+
+        # Les termes composés déjà présents dans le CV sont utiles
+        if "-" in original:
+            score += 12
+
+        # Les mots longs sont généralement plus discriminants
+        score += min(len(normalized), 14) / 2
+
+        prepared.append({
+            "term": original,
+            "normalized": normalized,
+            "score": score,
+            "position": position,
+        })
+
+    prepared.sort(
+        key=lambda item: (
+            -item["score"],
+            item["position"],
+            item["normalized"],
+        )
+    )
+
+    selected = []
+    seen = set()
+
+    for item in prepared:
+        normalized = item["normalized"]
+
+        if normalized in seen:
+            continue
+
+        seen.add(normalized)
+        selected.append(item["term"])
+
+        if len(selected) >= max_terms:
+            break
+
+    return selected
+
+    def add_candidate(
+        selected_items: List[Dict],
+        position: int,
+    ) -> None:
+        words = []
+
+        for item in selected_items:
+            words.extend(item["words"])
+
+        # Déduplication locale en conservant l'ordre.
+        unique_words = list(dict.fromkeys(words))
+
+        if not unique_words:
+            return
+
+        phrase = " ".join(unique_words)
+        score = 0.0
+
+        # Les expressions professionnelles sont préférées
+        # aux mots isolés.
+        if len(unique_words) == 3:
+            score += 26
+        elif len(unique_words) == 2:
+            score += 22
+        else:
+            score += 4
+
+        # Importance de la position dans le CV,
+        # mais sans écraser la qualité de l'expression.
+        if position < 10:
+            score += 18
+        elif position < 25:
+            score += 10
+        elif position < 50:
+            score += 5
+
+        # Répétition dans le CV.
+        score += sum(
+            word_frequency.get(word, 0) * 4
+            for word in set(unique_words)
         )
 
-    print("\nNon repérées :")
-    for item in comparison["missing"][:10]:
-        print(
-            item["coverage"],
-            "-",
-            item["libelle"],
-            "- termes trouvés :",
-            item["matched_terms"],
+        # Signal d'intitulé professionnel.
+        if any(
+            word.endswith(professional_suffixes)
+            for word in unique_words
+        ):
+            score += 18
+
+        # Un mot isolé n'est conservé que s'il dispose
+        # d'un signal professionnel suffisant.
+        if len(unique_words) == 1:
+            word = unique_words[0]
+
+            is_professional_word = (
+                word.endswith(professional_suffixes)
+                or word_frequency.get(word, 0) >= 2
+                or "-" in selected_items[0]["original"]
+                or (
+                    selected_items[0]["original"].isupper()
+                    and len(word) > 5
+                )
+            )
+
+            if not is_professional_word:
+                return
+
+        candidates.append({
+            "term": phrase,
+            "normalized": phrase,
+            "score": score,
+            "position": position,
+        })
+
+    # Expressions contiguës de trois puis deux termes.
+    for size in (3, 2):
+        for index in range(len(cleaned_terms) - size + 1):
+            window = cleaned_terms[index:index + size]
+
+            # Évite de fusionner des éléments trop éloignés
+            # dans le texte original.
+            positions = [item["position"] for item in window]
+
+            if max(positions) - min(positions) > size + 2:
+                continue
+
+            add_candidate(window, min(positions))
+
+    # Mots isolés avec signal professionnel suffisant.
+    for item in cleaned_terms:
+        add_candidate([item], item["position"])
+
+    candidates.sort(
+        key=lambda item: (
+            -item["score"],
+            item["position"],
+            -len(item["normalized"]),
+            item["normalized"],
         )
+    )
+
+    selected = []
+    seen = set()
+
+    for item in candidates:
+        normalized = item["normalized"]
+
+        if normalized in seen:
+            continue
+
+        # Évite de sélectionner à la fois une expression complète
+        # et plusieurs variantes quasiment identiques.
+        if any(
+            normalized in previous
+            or previous in normalized
+            for previous in seen
+        ):
+            continue
+
+        seen.add(normalized)
+        selected.append(item["term"])
+
+        if len(selected) >= max_terms:
+            break
+
+    return selected
+
+
+# =========================================================
+# ROME : GENERATION ET CLASSEMENT
+# =========================================================
+
+
+def infer_rome_jobs_from_terms(
+    cv_terms: List[str],
+    max_terms: int = 5,
+) -> List[Dict[str, object]]:
+    """Recherche et déduplique les métiers ROME issus des meilleurs termes."""
+    selected_terms = rank_rome_candidate_terms(cv_terms, max_terms=max_terms)
+    rome_jobs: Dict[str, Dict[str, object]] = {}
+
+    for term in selected_terms:
+        query = str(term).strip()
+        if not query:
+            continue
+
+        try:
+            jobs = search_unique_rome_jobs(query)
+        except Exception:
+            # Une requête ROME isolée ne doit pas faire tomber tout le pipeline.
+            continue
+
+        for job in jobs or []:
+            code = job.get("metier_code")
+            if not code:
+                continue
+
+            if code not in rome_jobs:
+                rome_jobs[code] = {
+                    **job,
+                    "matched_terms": [],
+                    "term_score": 0,
+                }
+
+            matched_terms = rome_jobs[code]["matched_terms"]
+            if query not in matched_terms:
+                matched_terms.append(query)
+
+            rome_jobs[code]["term_score"] = len(matched_terms)
+
+    results = list(rome_jobs.values())
+    results.sort(
+        key=lambda job: (
+            -int(job.get("term_score", 0)),
+            str(job.get("metier_libelle", "")),
+        )
+    )
+    return results
+
+
+def rank_rome_jobs_against_cv(
+    cv_text: str,
+    rome_jobs: List[Dict],
+    main_job_label: str = "",
+    domain_label: str = "",
+) -> List[Dict]:
+    """Classe les métiers ROME candidats selon leur cohérence avec le CV."""
+    normalized_cv = normalize_text(cv_text)
+    cv_words = set(_meaningful_words(cv_text, min_len=4))
+    main_words = set(_meaningful_words(main_job_label, min_len=4))
+    domain_words = set(_meaningful_words(domain_label, min_len=4))
+
+    ranked_jobs: List[Dict] = []
+
+    for job in rome_jobs or []:
+        job_copy = dict(job)
+        job_label = str(job.get("metier_libelle", "")).strip()
+        job_words = set(_meaningful_words(job_label, min_len=4))
+        matched_terms = list(job.get("matched_terms", []) or [])
+        term_score = int(job.get("term_score", 0) or 0)
+
+        score = min(term_score * 12, 36)
+        reasons: List[str] = []
+
+        if term_score:
+            reasons.append(f"{term_score} terme(s) du CV convergent vers ce métier")
+
+        # Libellé ROME retrouvé directement dans le CV.
+        common_cv_words = job_words & cv_words
+        label_coverage = (
+            len(common_cv_words) / len(job_words)
+            if job_words else 0.0
+        )
+        score += round(label_coverage * 40)
+
+        if common_cv_words:
+            reasons.append(
+                "libellé métier rapproché du CV : "
+                + ", ".join(sorted(common_cv_words))
+            )
+
+        # Cohérence avec l'inférence interne déjà produite.
+        common_main_words = job_words & main_words
+        if common_main_words:
+            score += 18
+            reasons.append("cohérent avec le métier principal détecté")
+
+        common_domain_words = job_words & domain_words
+        if common_domain_words:
+            score += 10
+            reasons.append("cohérent avec le domaine principal du CV")
+
+        # Bonus lorsque les termes déclencheurs eux-mêmes sont présents dans le CV.
+        trigger_words = set()
+        for term in matched_terms:
+            trigger_words.update(_meaningful_words(str(term), min_len=4))
+
+        trigger_overlap = trigger_words & cv_words
+        trigger_bonus = min(len(trigger_overlap) * 3, 15)
+        score += trigger_bonus
+
+        if trigger_overlap:
+            reasons.append(
+                "termes déclencheurs retrouvés : "
+                + ", ".join(sorted(trigger_overlap))
+            )
+
+        job_copy.update({
+            "ranking_score": score,
+            "ranking_reasons": reasons,
+            "label_coverage": round(label_coverage, 2),
+            "matched_terms": matched_terms,
+        })
+        ranked_jobs.append(job_copy)
+
+    ranked_jobs.sort(
+        key=lambda job: (
+            -int(job.get("ranking_score", 0)),
+            -int(job.get("term_score", 0)),
+            str(job.get("metier_libelle", "")),
+        )
+    )
+    return ranked_jobs

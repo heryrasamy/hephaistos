@@ -182,32 +182,161 @@ def compute_token_match(
         "matches": matches,
     }
 
+def evaluate_competence_match(
+    competence_text: str,
+    cv_text: str,
+) -> dict:
+    """
+    Évalue la visibilité d'une compétence dans un CV.
 
-if __name__ == "__main__":
-    tests = [
-        (
-            "Organiser des réunions et rédiger les comptes rendus",
-            "Organisation de réunions et rédaction de comptes rendus",
-        ),
-        (
-            "Régler et contrôler une machine de production",
-            "Réglage des machines et contrôle de la production",
-        ),
-        (
-            "Analyser des données avec Python et SQL",
-            "Analyse de données sous Python",
-        ),
-        (
-            "Concevoir une stratégie de communication digitale",
-            "Création de contenus pour les réseaux sociaux",
-        ),
+    La fonction analyse uniquement ce qui est écrit dans le document.
+    Elle ne juge pas les compétences réelles du candidat.
+    """
+    match_result = compute_token_match(
+        reference=competence_text,
+        candidate=cv_text,
+    )
+
+    visibility = match_result.get("score", 0.0)
+    matched_tokens = match_result.get("matched_tokens", [])
+    missing_tokens = match_result.get("missing_tokens", [])
+    matches = match_result.get("matches", [])
+
+    evidence = [
+        {
+            "reference": match.get("reference", ""),
+            "cv_term": match.get("candidate", ""),
+            "similarity": match.get("similarity", 0.0),
+        }
+        for match in matches
     ]
 
-    for reference, candidate in tests:
-        print("Référence :", reference)
-        print("Candidat :", candidate)
-        print(compute_token_match(reference, candidate))
-        print()
-        result = compute_token_match(reference, candidate)
+    if visibility >= 0.85 and not missing_tokens:
+        status = "CLEARLY_VISIBLE"
 
-print(result)
+        candidate_message = (
+            "Cette compétence est clairement mise en avant dans ton CV."
+        )
+
+        recruiter_view = (
+            "Un recruteur devrait pouvoir identifier rapidement "
+            "cette compétence à la lecture de ton CV."
+        )
+
+        candidate_action = (
+            "Vérifie simplement qu'elle apparaît dans une expérience "
+            "pertinente pour le poste visé."
+        )
+
+    elif (
+        visibility >= 0.35
+        or (
+            visibility >= 0.20
+            and len(matched_tokens) >= 2
+        )
+    ):
+        status = "PARTIALLY_VISIBLE"
+
+        candidate_message = (
+            "Ton CV présente plusieurs éléments liés à cette compétence, "
+            "mais elle n'est pas encore totalement visible."
+        )
+
+        recruiter_view = (
+            "Un recruteur pourrait repérer des éléments proches, "
+            "sans forcément identifier immédiatement cette compétence."
+        )
+
+        candidate_action = (
+            "Relis tes expériences et tes réalisations pour vérifier "
+            "si tu peux décrire plus précisément ce que tu as réellement fait."
+        )
+
+    else:
+        status = "NOT_INDICATED"
+
+        candidate_message = (
+            "Cette compétence n'est pas clairement indiquée dans ton CV."
+        )
+
+        recruiter_view = (
+            "Un recruteur ne pourra probablement pas identifier "
+            "cette compétence à partir des informations actuelles."
+        )
+
+        candidate_action = (
+            "Si tu as réellement utilisé cette compétence, cherche dans "
+            "ton parcours une expérience concrète qui permettrait de la présenter. "
+            "Sinon, ne l'ajoute pas."
+        )
+
+    return {
+        "competence": competence_text,
+        "status": status,
+        "visibility": visibility,
+        "evidence": evidence,
+        "matched_tokens": matched_tokens,
+        "missing_tokens": missing_tokens,
+        "candidate_message": candidate_message,
+        "recruiter_view": recruiter_view,
+        "candidate_action": candidate_action,
+    }
+
+
+def evaluate_rome_reference(
+    cv_text: str,
+    rome_reference: dict,
+) -> dict:
+    """
+    Évalue la visibilité dans le CV de toutes les compétences
+    et de tous les savoirs d'une référence métier ROME.
+    """
+
+    results = []
+
+    reference_items = (
+        rome_reference.get("competences", [])
+        + rome_reference.get("savoirs", [])
+    )
+
+    for item in reference_items:
+        libelle = str(item.get("libelle", "")).strip()
+
+        if not libelle:
+            continue
+
+        evaluation = evaluate_competence_match(
+            competence_text=libelle,
+            cv_text=cv_text,
+        )
+
+        evaluation["rome_code"] = item.get("code", "")
+        evaluation["rome_type"] = item.get("type", "")
+        evaluation["enjeu"] = item.get("enjeu", "")
+        evaluation["categorie"] = item.get("categorie", "")
+
+        results.append(evaluation)
+
+    clearly_visible = [
+        item for item in results
+        if item["status"] == "CLEARLY_VISIBLE"
+    ]
+
+    partially_visible = [
+        item for item in results
+        if item["status"] == "PARTIALLY_VISIBLE"
+    ]
+
+    not_indicated = [
+        item for item in results
+        if item["status"] == "NOT_INDICATED"
+    ]
+
+    return {
+        "rome_code": rome_reference.get("code", ""),
+        "rome_job": rome_reference.get("libelle", ""),
+        "total": len(results),
+        "clearly_visible": clearly_visible,
+        "partially_visible": partially_visible,
+        "not_indicated": not_indicated,
+    }
