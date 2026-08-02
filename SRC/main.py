@@ -866,9 +866,8 @@ navigation_html = (
     '</a>'
 
     '<div class="hephaistos-site-links">'
-    '<a href="#">Accueil</a>'
-    '<a href="#">Découvrir</a>'
-    '<a href="#">Contact</a>'
+    '<a href="https://heryrasamy.github.io/hephaistos/">Accueil</a>'
+    '<a href="https://heryrasamy.github.io/hephaistos/Utiliser-Hephaistos.html">Découvrir</a>'
     '</div>'
 
     '</nav>'
