@@ -1,5 +1,7 @@
 import re
 import unicodedata
+import base64
+from pathlib import Path
 from collections import Counter
 from typing import List
 
@@ -24,16 +26,884 @@ from location_helper import (
     format_commune_label,
     search_communes_geo_api,
 )
-from francetravail_api import (
-    get_access_token,
-    get_rome_job_profile,
-    build_rome_job_reference,
-)
+from francetravail_api import get_access_token
 from semantic_matching import evaluate_rome_reference
 
-st.set_page_config(page_title="Hephaistos", layout="wide")
-st.title("Hephaistos")
-st.write("Agent IA emploi – prototype")
+st.set_page_config(
+    page_title="Héphaïstos | La Boussole de l'Emploi",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+project_root = Path(__file__).resolve().parents[1]
+
+rower_path = (
+    project_root
+    / "Assets"
+    / "Rameur.png"
+)
+
+rower_base64 = base64.b64encode(
+    rower_path.read_bytes()
+).decode("utf-8")
+
+logo_path = (
+    project_root
+    / "Assets"
+    / "Logo boussole sf.png"
+)
+
+logo_base64 = base64.b64encode(
+    logo_path.read_bytes()
+).decode("utf-8")
+
+st.markdown(
+    """
+   <style>
+    .stApp {
+        background: #f7f8ff;
+    }
+
+    .block-container {
+        max-width: none;
+        padding: 0 28px 4rem;
+    }
+
+
+    /* ========================= */
+    /* BARRE NATIVE STREAMLIT */
+    /* ========================= */
+
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+
+    [data-testid="stToolbar"] {
+        display: none;
+    }
+
+    #MainMenu {
+        visibility: hidden;
+    }
+
+
+    /* ========================= */
+    /* NAVIGATION DU SITE */
+    /* ========================= */
+
+    .hephaistos-site-nav {
+        width: 100%;
+        min-height: 76px;
+        margin-bottom: 0;
+
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 32px;
+
+        font-family: Arial, sans-serif;
+    }
+
+
+    /* Logo */
+
+    .hephaistos-site-logo-link {
+        display: flex;
+        align-items: center;
+
+        flex: 0 0 auto;
+
+        text-decoration: none;
+    }
+
+    .hephaistos-site-logo {
+        display: block;
+
+        width: 220px;
+        height: auto;
+    }
+
+
+    /* Liens */
+
+    .hephaistos-site-links {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 46px;
+
+        flex: 1 1 auto;
+    }
+
+    .hephaistos-site-links a {
+        position: relative;
+
+        display: inline-flex;
+        align-items: center;
+
+        min-height: 76px;
+
+        color: #090d67;
+
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+        font-weight: 600;
+
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .hephaistos-site-links a:hover {
+        color: #3926ff;
+    }
+
+
+    /* Soulignement au survol */
+
+    .hephaistos-site-links a::after {
+        content: "";
+
+        position: absolute;
+        right: 0;
+        bottom: 2px;
+        left: 0;
+
+        height: 2px;
+
+        background: #3926ff;
+
+        transform: scaleX(0);
+        transform-origin: center;
+
+        transition: transform 0.2s ease;
+    }
+
+    .hephaistos-site-links a:hover::after {
+        transform: scaleX(1);
+    }
+
+
+    /* ========================= */
+    /* BANDEAU HÉPHAÏSTOS */
+    /* ========================= */
+
+    .hephaistos-header {
+        width: calc(100% + 56px);
+        min-height: 460px;
+        margin: 0 -28px 48px;
+        padding: 42px clamp(40px, 8vw, 140px);
+
+        box-sizing: border-box;
+
+        display: grid;
+        grid-template-columns:
+            minmax(520px, 1.1fr)
+            minmax(360px, 0.9fr);
+
+        align-items: center;
+        gap: clamp(40px, 6vw, 100px);
+
+        border-radius: 0;
+
+        background:
+            radial-gradient(
+                circle at 18% 50%,
+                rgba(123, 91, 249, 0.34) 0%,
+                transparent 36%
+            ),
+            linear-gradient(
+                115deg,
+                #4e30cd 0%,
+                #12328c 54%,
+                #06286e 100%
+            );
+
+        box-shadow:
+            0 18px 45px rgba(19, 26, 102, 0.14);
+
+        overflow: hidden;
+    }
+
+
+    /* Partie texte */
+
+    .hephaistos-header-content {
+        flex: 1 1 62%;
+        max-width: 720px;
+
+        color: #ffffff;
+    }
+
+    .hephaistos-platform-name {
+        display: inline-flex;
+
+        margin: 0 0 22px;
+        padding: 9px 16px;
+
+        border: 1px solid rgba(255, 255, 255, 0.48);
+        border-radius: 999px;
+
+        background: rgba(255, 255, 255, 0.07);
+
+        color: #ffffff;
+
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
+    .hephaistos-header-title {
+        margin: 0 0 24px;
+
+        color: #ffffff;
+
+        font-family: Arial, sans-serif;
+        font-size: clamp(48px, 4.2vw, 64px);
+        font-weight: 700;
+        line-height: 1.06;
+        letter-spacing: -1.5px;
+    }
+
+    .hephaistos-header-text {
+        max-width: 620px;
+        margin: 0;
+
+        color: rgba(255, 255, 255, 0.94);
+
+        font-family: Arial, sans-serif;
+        font-size: 18px;
+        line-height: 1.55;
+    }
+
+
+    /* Partie illustration */
+
+    .hephaistos-header-visual {
+        flex: 0 0 300px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .hephaistos-header-visual-circle {
+        width: 260px;
+        height: 260px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .hephaistos-header-visual-img {
+        display: block;
+
+        width: 100%;
+        height: 100%;
+
+        object-fit: contain;
+
+        transform: scale(1.65);
+        transform-origin: 50% 50%;
+    }
+
+    .hephaistos-header-visual-circle:hover
+    .hephaistos-header-visual-img {
+        animation: rower-forward 1.4s ease-in-out 1;
+    }
+
+    @keyframes rower-forward {
+        0% {
+            transform:
+                translateY(0)
+                scale(1.55);
+        }
+
+        50% {
+            transform:
+                translateY(-5px)
+                scale(1.60);
+        }
+
+        100% {
+            transform:
+                translateY(0)
+                scale(1.55);
+        }
+    }
+
+
+    /* ========================= */
+    /* TEXTES DE L'APPLICATION */
+    /* ========================= */
+
+    [data-testid="stMarkdownContainer"]
+    p:not(.hephaistos-platform-name):not(.hephaistos-header-text),
+    [data-testid="stWidgetLabel"] p,
+    label {
+        color: #25285f !important;
+    }
+
+
+    /* ========================= */
+    /* WIDGETS STREAMLIT */
+    /* ========================= */
+
+    /* Zone upload CV */
+
+    [data-testid="stFileUploaderDropzone"] {
+        background:
+            linear-gradient(
+                115deg,
+                #243a9a 0%,
+                #17348d 55%,
+                #0c2b78 100%
+            ) !important;
+
+        border:
+            1px solid
+            rgba(255, 255, 255, 0.14) !important;
+
+        border-radius: 16px !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] * {
+        color: #ffffff !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] button {
+        background:
+            rgba(255, 255, 255, 0.08) !important;
+
+        color: #ffffff !important;
+
+        border:
+            1px solid
+            rgba(255, 255, 255, 0.18) !important;
+
+        border-radius: 12px !important;
+    }
+
+
+    /* Champs texte */
+
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="base-input"] > div,
+    div[data-baseweb="textarea"] {
+        background:
+            linear-gradient(
+                115deg,
+                #243a9a 0%,
+                #17348d 55%,
+                #0c2b78 100%
+            ) !important;
+
+        border:
+            1px solid
+            rgba(255, 255, 255, 0.12) !important;
+
+        border-radius: 14px !important;
+    }
+
+    div[data-baseweb="input"] input,
+    div[data-baseweb="base-input"] input,
+    div[data-baseweb="textarea"] textarea {
+        color: #ffffff !important;
+    }
+
+    div[data-baseweb="input"] input::placeholder,
+    div[data-baseweb="base-input"] input::placeholder,
+    div[data-baseweb="textarea"] textarea::placeholder {
+        color:
+            rgba(255, 255, 255, 0.72) !important;
+    }
+
+
+    /* Selectbox */
+
+    div[data-baseweb="select"] > div {
+        background:
+            linear-gradient(
+                115deg,
+                #243a9a 0%,
+                #17348d 55%,
+                #0c2b78 100%
+            ) !important;
+
+        border:
+            1px solid
+            rgba(255, 255, 255, 0.12) !important;
+
+        border-radius: 14px !important;
+
+        color: #ffffff !important;
+    }
+
+    div[data-baseweb="select"] * {
+        color: #ffffff !important;
+    }
+
+
+    /* ========================= */
+    /* BOUTONS STREAMLIT BLANCS */
+    /* ========================= */
+
+    [data-testid="stButton"] button {
+        min-height: 46px;
+        padding: 0 18px;
+
+        border:
+            1px solid #3926ff !important;
+
+        border-radius: 12px;
+
+        background: #ffffff !important;
+        color: #2415d8 !important;
+
+        font-weight: 700;
+    }
+
+    [data-testid="stButton"] button p,
+    [data-testid="stButton"] button span {
+        color: #2415d8 !important;
+
+        -webkit-text-fill-color:
+            #2415d8 !important;
+    }
+
+    [data-testid="stButton"] button:hover {
+        border-color: #2818dd !important;
+
+        background: #f4f2ff !important;
+        color: #2818dd !important;
+    }
+
+    [data-testid="stButton"] button:hover p,
+    [data-testid="stButton"] button:hover span {
+        color: #2818dd !important;
+
+        -webkit-text-fill-color:
+            #2818dd !important;
+    }
+
+
+    /* ========================= */
+    /* TEXTAREA : TEXTE DE L'OFFRE */
+    /* ========================= */
+
+    [data-testid="stTextArea"] {
+        background: transparent !important;
+    }
+
+    [data-testid="stTextArea"]
+    div[data-baseweb="textarea"],
+    [data-testid="stTextArea"]
+    div[data-baseweb="base-input"] {
+        overflow: hidden;
+
+        background: #17348d !important;
+        background-color: #17348d !important;
+
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+
+        border-radius: 16px !important;
+    }
+
+    [data-testid="stTextArea"] textarea {
+        background: #17348d !important;
+        background-color: #17348d !important;
+
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+
+        border-radius: 16px !important;
+
+        color: #ffffff !important;
+        caret-color: #ffffff !important;
+
+        -webkit-text-fill-color:
+            #ffffff !important;
+    }
+
+    [data-testid="stTextArea"]
+    div[data-baseweb="textarea"]:focus-within,
+    [data-testid="stTextArea"]
+    div[data-baseweb="base-input"]:focus-within,
+    [data-testid="stTextArea"] textarea:focus {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stTextArea"]
+    textarea::placeholder {
+        color:
+            rgba(255, 255, 255, 0.72) !important;
+
+        -webkit-text-fill-color:
+            rgba(255, 255, 255, 0.72) !important;
+    }
+
+
+    /* ========================= */
+    /* TITRES DE L'APPLICATION */
+    /* ========================= */
+
+    .stApp h1,
+    .stApp h2,
+    .stApp h3,
+    .stApp h4,
+    .stApp h5,
+    .stApp h6 {
+        color: #0a1468 !important;
+
+        -webkit-text-fill-color:
+            #0a1468 !important;
+
+        opacity: 1 !important;
+    }
+
+    .hephaistos-section-title {
+        margin: 34px 0 18px;
+
+        color: #0a1468 !important;
+
+        -webkit-text-fill-color:
+            #0a1468 !important;
+
+        font-family: Arial, sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.25;
+
+        opacity: 1 !important;
+    }
+
+
+    /* Le bandeau conserve ses textes blancs */
+
+    .stApp
+    .hephaistos-header
+    .hephaistos-header-title {
+        color: #ffffff !important;
+
+        -webkit-text-fill-color:
+            #ffffff !important;
+    }
+
+    .stApp
+    .hephaistos-header
+    .hephaistos-platform-name {
+        color: #ffffff !important;
+
+        -webkit-text-fill-color:
+            #ffffff !important;
+    }
+
+    .stApp
+    .hephaistos-header
+    .hephaistos-header-text {
+        color:
+            rgba(255, 255, 255, 0.94) !important;
+
+        -webkit-text-fill-color:
+            rgba(255, 255, 255, 0.94) !important;
+    }
+    /* ========================= */
+    /* MODALE D’ANALYSE */
+    /* ========================= */
+
+    div[data-testid="stDialog"] div[role="dialog"] {
+        background: #f7f8ff !important;
+        color: #0a1468 !important;
+        border: 1px solid #dfe3f5 !important;
+        border-radius: 20px !important;
+    }
+
+    div[data-testid="stDialog"] h1,
+    div[data-testid="stDialog"] h2,
+    div[data-testid="stDialog"] h3,
+    div[data-testid="stDialog"] h4 {
+        color: #0a1468 !important;
+    }
+
+    div[data-testid="stDialog"]
+    div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stDialog"]
+    div[data-testid="stMarkdownContainer"] li {
+        color: #17215f !important;
+        opacity: 1 !important;
+    }
+
+    div[data-testid="stDialog"]
+    div[data-testid="stCaptionContainer"],
+    div[data-testid="stDialog"]
+    div[data-testid="stCaptionContainer"] p {
+        color: #5d6482 !important;
+        opacity: 1 !important;
+    }
+    /* ========================= */
+    /* BLOCS DÉPLIABLES */
+    /* ========================= */
+
+    div[data-testid="stExpander"] details {
+        overflow: hidden;
+
+        background: #ffffff !important;
+        border: 1px solid #d9d4ff !important;
+        border-radius: 14px !important;
+
+        box-shadow:
+            0 4px 12px
+            rgba(18, 32, 99, 0.05);
+    }
+
+    div[data-testid="stExpander"] summary {
+        background: #f0edff !important;
+        color: #0a1468 !important;
+    }
+
+    div[data-testid="stExpander"] summary p {
+        color: #0a1468 !important;
+        font-weight: 600 !important;
+    }
+
+    div[data-testid="stExpander"] summary svg {
+        color: #3926ff !important;
+        fill: #3926ff !important;
+    }
+    /* ========================= */
+    /* CARTES DES FORCES */
+    /* ========================= */
+
+    div[class*="st-key-strength-card-"] {
+        min-height: 54px;
+        margin-bottom: 14px;
+        padding: 14px 16px;
+
+        border: 1px solid transparent;
+        border-radius: 14px;
+
+        box-sizing: border-box;
+        box-shadow:
+            0 4px 12px
+            rgba(18, 32, 99, 0.05);
+    }
+
+    div[class*="st-key-strength-card-"] p {
+        margin: 0 !important;
+        color: #0a1468 !important;
+        font-weight: 600;
+    }
+
+    /* Communication : lavande */
+    div[class*="st-key-strength-card-0"],
+    div[class*="st-key-strength-card-7"] {
+        background: #f0edff !important;
+        border-color: #ddd6ff !important;
+    }
+
+    /* Accueil : bleu clair */
+    div[class*="st-key-strength-card-1"],
+    div[class*="st-key-strength-card-2"],
+    div[class*="st-key-strength-card-3"] {
+        background: #eaf5ff !important;
+        border-color: #d2e9fa !important;
+    }
+
+    /* Outils numériques : jaune sable */
+    div[class*="st-key-strength-card-4"] {
+        background: #fff7df !important;
+        border-color: #f2e6bd !important;
+    }
+
+    /* Relationnel : vert menthe */
+    div[class*="st-key-strength-card-5"],
+    div[class*="st-key-strength-card-6"] {
+        background: #eaf8f1 !important;
+        border-color: #d1ebde !important;
+    }
+        /* ========================= */
+    /* CARTES DES OFFRES */
+    /* ========================= */
+
+    div[class*="st-key-offer-card-"] {
+        margin-bottom: 18px;
+        padding: 22px 24px;
+
+        background: #ffffff !important;
+        border: 1px solid #dfe3f5 !important;
+        border-radius: 20px !important;
+
+        box-shadow:
+            0 8px 24px
+            rgba(18, 32, 99, 0.08) !important;
+
+        box-sizing: border-box;
+    }
+    /* ========================= */
+    /* TEXTES SECONDAIRES */
+    /* ========================= */
+
+    div[data-testid="stCaptionContainer"],
+    div[data-testid="stCaptionContainer"] p {
+        color: #5d6482 !important;
+        opacity: 1 !important;
+    }
+    /* ========================= */
+    /* VERDIC D'OPPORTUNITE DANS LES CARTES */
+    /* ========================= */
+
+    div[class*="st-key-offer-card-"]
+    [data-testid="stCaptionContainer"] {
+        color: #4b507d !important;
+    }
+
+    div[class*="st-key-offer-card-"]
+    [data-testid="stCaptionContainer"] p {
+        color: #4b507d !important;
+
+    -webkit-text-fill-color:
+        #4b507d !important;
+
+    opacity: 1 !important;
+}
+    /* ========================= */
+    /* RESPONSIVE */
+    /* ========================= */
+
+    @media (max-width: 1050px) {
+        .hephaistos-site-nav {
+            flex-wrap: wrap;
+            padding-bottom: 14px;
+        }
+
+        .hephaistos-site-links {
+            order: 3;
+            width: 100%;
+
+            justify-content: flex-start;
+            flex-wrap: wrap;
+
+            gap: 8px 26px;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .block-container {
+            padding-top: 1rem;
+        }
+
+        .hephaistos-header {
+            min-height: auto;
+            padding: 42px 26px;
+
+            flex-direction: column;
+            gap: 34px;
+
+            text-align: center;
+        }
+
+        .hephaistos-header-content {
+            flex: none;
+            max-width: 100%;
+        }
+
+        .hephaistos-platform-name {
+            margin-bottom: 18px;
+        }
+
+        .hephaistos-header-title {
+            font-size: 42px;
+        }
+
+        .hephaistos-header-text {
+            font-size: 16px;
+        }
+
+        .hephaistos-header-visual {
+            flex: none;
+            width: 100%;
+        }
+
+        .hephaistos-header-visual-circle {
+            width: 200px;
+            height: 200px;
+        }
+
+        .hephaistos-section-title {
+            margin: 28px 0 16px;
+            font-size: 24px;
+        }
+    }
+</style>
+    """,
+    unsafe_allow_html=True,
+)
+
+navigation_html = (
+    '<nav class="hephaistos-site-nav">'
+
+    '<a href="#" '
+    'class="hephaistos-site-logo-link" '
+    'aria-label="Accueil - La Boussole de l\'Emploi">'
+
+    '<img '
+    'class="hephaistos-site-logo" '
+    f'src="data:image/png;base64,{logo_base64}" '
+    'alt="La Boussole de l\'Emploi">'
+
+    '</a>'
+
+    '<div class="hephaistos-site-links">'
+    '<a href="#">Accueil</a>'
+    '<a href="#">Découvrir</a>'
+    '<a href="#">Contact</a>'
+    '</div>'
+
+    '</nav>'
+)
+
+header_html = (
+    f'<section class="hephaistos-header">'
+    f'<div class="hephaistos-header-content">'
+    f'<p class="hephaistos-platform-name">'
+    f'Votre guide pour garder le cap'
+    f'</p>'
+    f'<h1 class="hephaistos-header-title">'
+    f'Héphaïstos'
+    f'</h1>'
+    f'<p class="hephaistos-header-text">'
+    f'Votre guide pour comprendre votre parcours, '
+    f'choisir votre direction professionnelle '
+    f'et identifier les opportunités adaptées à votre profil.'
+    f'</p>'
+    f'</div>'
+    f'<div class="hephaistos-header-visual">'
+    f'<div class="hephaistos-header-visual-circle">'
+    f'<img class="hephaistos-header-visual-img" '
+    f'src="data:image/png;base64,{rower_base64}" '
+    f'alt="Rameur Héphaïstos">'
+    f'</div>'
+    f'</div>'
+    f'</section>'
+)
+
+st.markdown(
+    navigation_html + header_html,
+    unsafe_allow_html=True,
+)
+
 
 # =========================================================
 # SESSION STATE
@@ -813,7 +1683,25 @@ def display_family_label(family):
 # =========================================================
 # 1) IMPORTER LE CV
 # =========================================================
-st.subheader("1) Importer votre CV")
+
+st.markdown(
+    """
+    <h2 style="
+        margin: 34px 0 18px;
+        color: #0a1468 !important;
+        -webkit-text-fill-color: #0a1468 !important;
+        font-family: Arial, sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.25;
+        opacity: 1;
+    ">
+        1) Importer votre CV
+    </h2>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 uploaded = st.file_uploader(
     "Dépose ton CV (PDF, DOCX ou TXT)",
@@ -1526,69 +2414,211 @@ if offers_scored:
         url = to_text(o.get("url", ""))
         score = o.get("score", 0)
 
-        realistic = o.get("realistic_opportunity", {}) or {}
-        realistic_verdict = realistic.get("verdict", "à étudier")
-        realistic_explanation = realistic.get("explanation", "")
+        realistic = (
+            o.get("realistic_opportunity", {}) or {}
+        )
 
-        st.write(f"**{score}/100 — {title}**")
-        st.caption(f"Opportunité réaliste : {realistic_verdict}")
+        realistic_verdict = realistic.get(
+            "verdict",
+            "à étudier",
+        )
 
-        if realistic_explanation:
-            st.write(f"Pourquoi : {realistic_explanation}")
+        realistic_explanation = realistic.get(
+            "explanation",
+            "",
+        )
 
-        if company:
-            st.write(f"**Entreprise :** {company}")
+        with st.container(
+                border=True,
+                key=f"offer-card-{i}",
+            ):
+            st.write(f"**{score}/100 — {title}**")
 
-        if location:
-            st.write(f"**Lieu :** {location}")
+            st.caption(
+                f"Opportunité réaliste : "
+                f"{realistic_verdict}"
+            )
 
-        if url:
-            st.markdown(f"**Lien pour postuler :** [Ouvrir l'annonce]({url})")
+            if realistic_explanation:
+                st.write(
+                    f"Pourquoi : "
+                    f"{realistic_explanation}"
+                )
 
-            if st.button("Utiliser cette offre", key=f"use_offer_{i}"):
-                st.session_state["offer_text"] = to_text(o.get("text", ""))
-                st.session_state["selected_offer_meta"] = {
+            if company:
+                st.write(
+                    f"**Entreprise :** {company}"
+                )
+
+            if location:
+                st.write(
+                    f"**Lieu :** {location}"
+                )
+
+            if url:
+                st.markdown(
+                    f"**Lien pour postuler :** "
+                    f"[Ouvrir l'annonce]({url})"
+                )
+
+            if st.button(
+                "Utiliser cette offre",
+                key=f"use_offer_{i}",
+            ):
+                st.session_state["offer_text"] = (
+                    to_text(o.get("text", ""))
+                )
+
+                st.session_state[
+                    "selected_offer_meta"
+                ] = {
                     "title": title,
                     "company": company,
                     "location": location,
                     "url": url,
                     "score": o.get("score", 0),
-                    "base_score": o.get("base_score", 0),
-                    "realistic_opportunity": o.get("realistic_opportunity", {}) or {},
+                    "base_score": o.get(
+                        "base_score",
+                        0,
+                    ),
+                    "realistic_opportunity": (
+                        o.get(
+                            "realistic_opportunity",
+                            {},
+                        )
+                        or {}
+                    ),
                 }
 
-        with st.expander("Voir description", expanded=False):
-            st.write(to_text(o.get("text", "Description non disponible")))
+                selected_offer_text = (
+                    st.session_state.get(
+                        "offer_text",
+                        "",
+                    )
+                )
+
+                if (
+                    cv_text
+                    and selected_offer_text.strip()
+                ):
+                    result = score_cv_offer(
+                        to_text(cv_text),
+                        to_text(
+                            selected_offer_text
+                        ),
+                    )
+
+                    st.session_state[
+                        "last_analysis"
+                    ] = result
+
+                    st.session_state[
+                        "show_analysis_dialog"
+                    ] = True
+                else:
+                    st.session_state[
+                        "show_analysis_dialog"
+                    ] = False
+
+            with st.expander(
+                "Voir description",
+                expanded=False,
+            ):
+                st.write(
+                    to_text(
+                        o.get(
+                            "text",
+                            "Description non disponible",
+                        )
+                    )
+                )
 
 
 # =========================================================
-# 3) COLLER UNE OFFRE
+# ANALYSER UNE OFFRE EXTERNE
 # =========================================================
-st.subheader("3) Coller une offre d'emploi (optionnel)")
+selected_offer_meta = (
+    st.session_state.get(
+        "selected_offer_meta",
+        {},
+    )
+    or {}
+)
 
-st.text_area("Texte de l'offre", height=180, key="offer_text")
+with st.expander(
+    "Vous avez trouvé une offre ailleurs ?",
+    expanded=False,
+):
+    st.write(
+        "Colle ici une annonce trouvée sur un autre "
+        "site pour la comparer avec ton CV."
+    )
 
+    st.text_area(
+        "Texte de l’offre",
+        height=180,
+        key="offer_text",
+    )
 
-# =========================================================
-# 4) ANALYSER CV vs OFFRE
-# =========================================================
-st.subheader("4) Analyser CV vs Offre")
+    if st.button(
+        "Analyser cette offre externe",
+        key="analyze-external-offer",
+    ):
+        external_offer_text = (
+            st.session_state.get(
+                "offer_text",
+                "",
+            )
+        )
 
-offer_text = st.session_state.get("offer_text", "")
-selected_offer_meta = st.session_state.get("selected_offer_meta", {}) or {}
+        if not cv_text:
+            st.warning(
+                "Importe d’abord un CV."
+            )
 
-if st.button("Analyser CV vs Offre"):
-    if not cv_text:
-        st.warning("Importer un CV d'abord.")
-    elif not offer_text.strip():
-        st.warning("Aucune offre fournie.")
-    else:
-        result = score_cv_offer(to_text(cv_text), to_text(offer_text))
-        st.session_state["last_analysis"] = result
+        elif not external_offer_text.strip():
+            st.warning(
+                "Colle d’abord le texte de l’offre."
+            )
 
-analysis = st.session_state.get("last_analysis")
+        else:
+            result = score_cv_offer(
+                to_text(cv_text),
+                to_text(
+                    external_offer_text
+                ),
+            )
 
-if analysis:
+            st.session_state[
+                "last_analysis"
+            ] = result
+
+            # Une offre externe ne possède pas les
+            # scores et métadonnées du Top 30.
+            st.session_state[
+                "selected_offer_meta"
+            ] = {}
+
+            selected_offer_meta = {}
+
+            st.session_state[
+                "show_analysis_dialog"
+            ] = True
+
+@st.dialog(
+    "Analyse CV vs offre",
+    width="large",
+)
+def show_analysis_dialog():
+    analysis = st.session_state.get(
+        "last_analysis"
+    )
+
+    if not analysis:
+        st.warning(
+            "Aucune analyse disponible."
+        )
+        return
     score = analysis.get("score", 0)
     interpretation = interpret_score(score)
 
@@ -1637,14 +2667,14 @@ if analysis:
     )
 
     if selected_offer_score is not None:
-        st.caption(
+        st.write(
             "Cette offre remonte parce qu’elle semble cohérente avec ton profil et ta direction métier. "
             "Le score ci-dessous regarde plus strictement ce qui "
             "apparaît réellement dans ton CV par rapport à l’annonce."
         )
 
     if selected_offer_base_score is not None:
-        st.caption(
+        st.write(
             f"Score de départ avant ajustements métier : {selected_offer_base_score}/100"
         )
 
@@ -1724,11 +2754,75 @@ if analysis:
         st.markdown("### Forces principales")
 
         matched_terms = analysis.get("matched_terms", [])
-        display_matched_terms = prepare_display_terms(matched_terms, max_items=8)
+        display_matched_terms = prepare_display_terms(
+            matched_terms,
+            max_items=8,
+        )
+
+        def get_strength_category(term):
+            normalized_term = str(term).lower()
+
+            category_keywords = {
+                "communication": (
+                    "communication",
+                    "réseau social",
+                    "reseau social",
+                    "réseaux sociaux",
+                    "reseaux sociaux",
+                    "digital",
+                    "contenu",
+                    "rédaction",
+                    "redaction",
+                ),
+                "accueil": (
+                    "accueil",
+                    "standard",
+                    "téléphonique",
+                    "telephonique",
+                    "réception",
+                    "reception",
+                ),
+                "numerique": (
+                    "office",
+                    "excel",
+                    "word",
+                    "powerpoint",
+                    "logiciel",
+                    "informatique",
+                    "numérique",
+                    "numerique",
+                    "tableau",
+                ),
+                "relationnel": (
+                    "relation client",
+                    "relation usager",
+                    "service client",
+                    "accompagnement",
+                    "écoute",
+                    "ecoute",
+                ),
+            }
+
+            for category, keywords in category_keywords.items():
+                if any(
+                    keyword in normalized_term
+                    for keyword in keywords
+                ):
+                    return category
+
+            return "general"
 
         if display_matched_terms:
-            for term in display_matched_terms:
-                st.write(f"- {term}")
+            strength_columns = st.columns(2)
+
+            for index, term in enumerate(display_matched_terms):
+                column = strength_columns[index % 2]
+
+                with column:
+                    with st.container(
+                        key=f"strength-card-{index}",
+                    ):
+                        st.write(term)
         else:
             st.write("Aucune force principale détectée.")
 
@@ -1808,32 +2902,8 @@ if analysis:
         else:
             st.write("Aucune compétence manquante interprétée.")
 
-    with st.expander("Voir le détail technique (debug)"):
-        st.markdown("#### Détail du score")
-        st.write(f"Coverage : {coverage}%")
-        st.write(f"Bonus expressions : +{bonus}")
-        st.write(f"Bonus familles : +{family_bonus}")
-
-        if st.checkbox(
-            "Afficher les détails techniques avancés", key="debug_terms_checkbox"
-        ):
-            st.markdown("#### Mots trouvés (brut)")
-            raw_matched_terms = analysis.get("matched_terms", [])
-
-            if raw_matched_terms:
-                for term in raw_matched_terms:
-                    st.write(f"- {term}")
-            else:
-                st.write("Aucun mot trouvé.")
-
-            st.markdown("#### Mots absents (brut)")
-            raw_missing_terms = analysis.get("missing_terms", [])
-
-            if raw_missing_terms:
-                for term in raw_missing_terms:
-                    st.write(f"- {term}")
-            else:
-                st.write("Aucun mot absent.")
+    
+            
 
     st.markdown("### Mots forts")
 
@@ -1893,6 +2963,17 @@ if analysis:
 
     if suggestions:
         for suggestion in suggestions:
-            st.write(f"- {suggestion}")
+            st.write(f"• {suggestion}")
     else:
         st.write("Aucune suggestion générée.")
+
+    if st.button(
+        "Fermer l’analyse",
+        key="close-analysis-dialog",
+        use_container_width=True,
+    ):
+        st.session_state["show_analysis_dialog"] = False
+        st.rerun()
+
+if st.session_state.get("show_analysis_dialog", False):
+    show_analysis_dialog()

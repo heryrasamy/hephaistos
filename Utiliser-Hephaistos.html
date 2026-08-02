@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utiliser Héphaïstos | La Boussole de l'Emploi</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- ========================= -->
+    <!-- HEADER -->
+    <!-- ========================= -->
+
+    <header>
+
+        <nav class="site-nav">
+
+    <a
+        href="index.html"
+        class="logo"
+        aria-label="Accueil - La Boussole de l'Emploi"
+    >
+        <img
+            src="Assets/Logo boussole sf.png"
+            alt="La Boussole de l'Emploi"
+        >
+    </a>
+
+    <ul class="nav-links">
+
+        <li>
+            <a href="index.html">
+                Accueil
+            </a>
+        </li>
+
+        <li>
+            <a
+                href="Utiliser-Hephaistos.html"
+                class="active"
+            >
+                Découvrir
+            </a>
+        </li>
+
+        <li>
+            <a
+                href="https://hephaistos.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Héphaïstos
+            </a>
+        </li>
+
+    </ul>
+
+</nav>
+
+    </header>
+
+    <!-- ========================= -->
+    <!-- HERO -->
+    <!-- ========================= -->
+
+    <main class="hephaistos-page">
+
+    <!-- ========================= -->
+    <!-- INTRODUCTION -->
+    <!-- ========================= -->
+
+    <section class="hephaistos-intro">
+
+        <div class="hephaistos-intro-content">
+
+            <p class="hephaistos-label">
+                Votre guide pour garder le cap
+            </p>
+
+            <h1>Utiliser Héphaïstos</h1>
+
+            <p class="hephaistos-intro-text">
+                Importez votre CV, choisissez votre direction professionnelle
+                et définissez votre zone de recherche.
+                Héphaïstos vous guidera ensuite vers les opportunités
+                les plus adaptées à votre parcours.
+            </p>
+
+            <div class="hephaistos-actions">
+
+                <a
+                href="https://hephaistos.streamlit.app/"
+                class="hephaistos-launch"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Lancer Héphaïstos
+            </a>
+
+            </div>
+
+        </div>
+
+        <div class="hephaistos-intro-visual">
+
+            <img
+                src="Assets/Logo NavigateurSF.png"
+                alt=""
+            >
+
+        </div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- AVANT DE COMMENCER -->
+    <!-- ========================= -->
+
+    <section class="hephaistos-preparation">
+
+        <div class="hephaistos-section-header">
+
+            <h2>Avant de commencer</h2>
+
+            <p>
+                Trois éléments suffisent pour préparer votre parcours.
+            </p>
+
+        </div>
+
+        <div class="preparation-cards">
+
+            <article class="preparation-card">
+
+                <img
+                    src="Assets/Logo Convaincre.png"
+                    alt=""
+                >
+
+                <span class="preparation-number">1</span>
+
+                <h3>Préparez votre CV</h3>
+
+                <p>
+                    Utilisez un CV au format PDF, DOCX ou TXT.
+                    Héphaïstos analysera son contenu pour comprendre
+                    votre profil professionnel.
+                </p>
+
+            </article>
+
+            <article class="preparation-card">
+
+                <img
+                    src="Assets/Logo s'orienter.png"
+                    alt=""
+                >
+
+                <span class="preparation-number">2</span>
+
+                <h3>Choisissez votre direction</h3>
+
+                <p>
+                    Indiquez le métier ou la famille professionnelle
+                    que vous souhaitez explorer.
+                </p>
+
+            </article>
+
+            <article class="preparation-card">
+
+                <img
+                    src="Assets/Logo Trouver.png"
+                    alt=""
+                >
+
+                <span class="preparation-number">3</span>
+
+                <h3>Définissez votre recherche</h3>
+
+                <p>
+                    Sélectionnez votre localisation et votre rayon
+                    de recherche pour obtenir des opportunités adaptées.
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+    <!-- ========================= -->
+    <!-- GUIDE UTILISATEUR -->
+    <!-- ========================= -->
+
+    <section
+        class="hephaistos-guide"
+        aria-labelledby="hephaistos-guide-title"
+    >
+
+        <div class="hephaistos-section-header">
+
+            <h2 id="hephaistos-guide-title">
+                Votre parcours avec Héphaïstos
+            </h2>
+
+            <p>
+                Un guide pour avancer à votre rythme,
+                du CV jusqu’à l’offre qui vous correspond.
+            </p>
+
+        </div>
+
+        <!-- Personnage réutilisé à chaque étape -->
+        <svg
+            class="guide-symbols"
+            width="0"
+            height="0"
+            aria-hidden="true"
+        >
+            <defs>
+
+                <symbol
+                    id="guide-traveler"
+                    viewBox="0 0 32 42"
+                >
+                    <circle
+                        cx="17"
+                        cy="6"
+                        r="4"
+                    />
+
+                    <path
+                        d="
+                            M16 11
+                            L13 22
+                            L18 28
+                            L23 39
+                            M14 22
+                            L9 31
+                            L5 39
+                            M15 14
+                            L23 20
+                            M12 14
+                            L7 21
+                            M12 12
+                            L8 14
+                            L7 23
+                            L12 24
+                        "
+                    />
+
+                </symbol>
+
+            </defs>
+        </svg>
+
+        <div class="guide-map">
+
+            <!-- Route décorative -->
+            <svg
+                class="guide-road"
+                viewBox="0 0 1000 1500"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+            >
+                <path
+                    d="
+                        M500 60
+                        C620 150 620 240 500 300
+                        C380 370 380 470 500 540
+                        C620 610 620 710 500 780
+                        C380 850 380 950 500 1020
+                        C620 1090 620 1200 500 1290
+                        C450 1340 450 1400 500 1440
+                    "
+                />
+            </svg>
+
+            <!-- ÉTAPE 1 -->
+
+            <article class="guide-step guide-step-1">
+
+                <figure
+                    class="guide-preview guide-preview-1"
+                    aria-label="Aperçu de l’importation du CV"
+                >
+                    <figcaption>
+                        Importer votre CV
+                    </figcaption>
+                </figure>
+
+                <div class="guide-waypoint">
+
+                    <svg
+                        class="guide-traveler"
+                        aria-hidden="true"
+                    >
+                        <use href="#guide-traveler"></use>
+                    </svg>
+
+                    <span class="guide-number">1</span>
+
+                </div>
+
+                <div class="guide-copy">
+
+                    <h3>Importez votre CV</h3>
+
+                    <p>
+                        Sélectionnez votre fichier au format
+                        PDF, DOCX ou TXT.
+                    </p>
+
+                </div>
+
+            </article>
+
+            <!-- ÉTAPE 2 -->
+
+            <article class="guide-step guide-step-2">
+
+                <figure
+                    class="guide-preview guide-preview-2"
+                    aria-label="Aperçu de l’analyse du profil"
+                >
+                    <figcaption>
+                        Comprendre votre profil
+                    </figcaption>
+                </figure>
+
+                <div class="guide-waypoint">
+
+                    <svg
+                        class="guide-traveler"
+                        aria-hidden="true"
+                    >
+                        <use href="#guide-traveler"></use>
+                    </svg>
+
+                    <span class="guide-number">2</span>
+
+                </div>
+
+                <div class="guide-copy">
+
+                    <h3>Découvrez votre profil</h3>
+
+                    <p>
+                        Consultez le métier principal détecté,
+                        vos compétences et les directions possibles.
+                    </p>
+
+                </div>
+
+            </article>
+
+            <!-- ÉTAPE 3 -->
+
+            <article class="guide-step guide-step-3">
+
+                <figure
+                    class="guide-preview guide-preview-3"
+                    aria-label="Aperçu du choix de la direction"
+                >
+                    <figcaption>
+                        Choisir votre direction
+                    </figcaption>
+                </figure>
+
+                <div class="guide-waypoint guide-waypoint-reverse">
+
+                    <span class="guide-number">3</span>
+
+                    <svg
+                        class="guide-traveler guide-traveler-reverse"
+                        aria-hidden="true"
+                    >
+                        <use href="#guide-traveler"></use>
+                    </svg>
+
+                </div>
+
+                <div class="guide-copy">
+
+                    <h3>Choisissez votre cap</h3>
+
+                    <p>
+                        Confirmez la direction proposée ou explorez
+                        une autre famille professionnelle.
+                    </p>
+
+                </div>
+
+            </article>
+
+            <!-- ÉTAPE 4 -->
+
+            <article class="guide-step guide-step-4">
+
+                <figure
+                    class="guide-preview guide-preview-4"
+                    aria-label="Aperçu des critères de recherche"
+                >
+                    <figcaption>
+                        Définir votre recherche
+                    </figcaption>
+                </figure>
+
+                <div class="guide-waypoint">
+
+                    <svg
+                        class="guide-traveler"
+                        aria-hidden="true"
+                    >
+                        <use href="#guide-traveler"></use>
+                    </svg>
+
+                    <span class="guide-number">4</span>
+
+                </div>
+
+                <div class="guide-copy">
+
+                    <h3>Lancez votre recherche</h3>
+
+                    <p>
+                        Indiquez votre localisation, votre rayon
+                        et vos critères complémentaires.
+                    </p>
+
+                </div>
+
+            </article>
+
+            <!-- ÉTAPE 5 -->
+
+            <article class="guide-step guide-step-5">
+
+                <figure
+                    class="guide-preview guide-preview-5"
+                    aria-label="Aperçu des offres recommandées"
+                >
+                    <figcaption>
+                        Explorer les opportunités
+                    </figcaption>
+                </figure>
+
+                <div class="guide-waypoint guide-waypoint-reverse">
+
+                    <span class="guide-number">5</span>
+
+                    <svg
+                        class="guide-traveler guide-traveler-reverse"
+                        aria-hidden="true"
+                    >
+                        <use href="#guide-traveler"></use>
+                    </svg>
+
+                </div>
+
+                <div class="guide-copy">
+
+                    <h3>Explorez les opportunités</h3>
+
+                    <p>
+                        Parcourez les offres classées selon leur
+                        compatibilité avec votre parcours.
+                    </p>
+
+                </div>
+
+            </article>
+
+            <!-- ÉTAPE 6 -->
+
+            <article class="guide-step guide-step-6">
+
+                <figure
+                    class="guide-preview guide-preview-6"
+                    aria-label="Aperçu de l’analyse d’une offre"
+                >
+                    <figcaption>
+                        Analyser une offre
+                    </figcaption>
+                </figure>
+
+                <div class="guide-waypoint">
+
+                    <svg
+                        class="guide-traveler"
+                        aria-hidden="true"
+                    >
+                        <use href="#guide-traveler"></use>
+                    </svg>
+
+                    <span class="guide-number">6</span>
+
+                </div>
+
+                <div class="guide-copy">
+
+                    <h3>
+                        Analysez l’offre qui vous intéresse
+                    </h3>
+
+                    <p>
+                        Comparez l’annonce avec votre CV pour
+                        identifier vos forces et les points à renforcer.
+                    </p>
+
+                </div>
+
+            </article>
+
+        </div>
+
+        <div class="guide-footer">
+
+            <aside class="guide-external-offer">
+
+                <h3>
+                    Une offre repérée sur un autre site ?
+                </h3>
+
+                <p>
+                    Indeed, Monster, LinkedIn ou le site d’une
+                    entreprise : copiez le texte de l’annonce,
+                    puis collez-le dans Héphaïstos pour l’analyser.
+                </p>
+
+                <svg
+                    class="guide-curved-arrow"
+                    viewBox="0 0 240 70"
+                    aria-hidden="true"
+                >
+                    <path
+                        d="
+                            M5 10
+                            C45 70 145 70 220 30
+                        "
+                    />
+
+                    <path
+                        d="
+                            M211 24
+                            L225 28
+                            L217 40
+                        "
+                    />
+                </svg>
+
+            </aside>
+
+            <a
+                href="https://hephaistos.streamlit.app/"
+                class="guide-launch"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Commencer avec Héphaïstos
+                <span aria-hidden="true">→</span>
+            </a>
+
+        </div>
+
+    </section>
+</main>
+
+</body>
+
+</html>

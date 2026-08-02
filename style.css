@@ -1,0 +1,2181 @@
+/* ========================= */
+/* BASE */
+/* ========================= */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+}
+
+
+/* ========================= */
+/* HEADER ET NAVIGATION */
+/* ========================= */
+
+header {
+    width: 100%;
+    background: #ffffff;
+}
+
+.site-nav {
+    width: calc(100% - 40px);
+    height: 76px;
+    margin: 0 auto;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 32px;
+}
+
+
+/* ========================= */
+/* LOGO */
+/* ========================= */
+
+.logo {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.logo img {
+    display: block;
+    width: 220px;
+    height: auto;
+}
+
+
+/* ========================= */
+/* LIENS DE NAVIGATION */
+/* ========================= */
+
+.nav-links {
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 36px;
+
+    list-style: none;
+}
+
+.nav-links li {
+    margin: 0;
+}
+
+.nav-links a {
+    position: relative;
+
+    display: inline-flex;
+    align-items: center;
+
+    min-height: 76px;
+
+    color: #090d67;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nav-links a:hover {
+    color: #3926ff;
+}
+
+.nav-links a.active {
+    color: #3926ff;
+}
+
+.nav-links a.active::after {
+    content: "";
+
+    position: absolute;
+    right: 0;
+    bottom: 15px;
+    left: 0;
+
+    height: 2px;
+
+    background: #3926ff;
+}
+
+
+/* ========================= */
+/* ZONE D'ACTIONS (connexion + CTA) */
+/* ========================= */
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+
+    gap: 14px;
+}
+
+
+/* ========================= */
+/* CONNEXION */
+/* ========================= */
+
+.login-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+
+    min-height: 46px;
+    padding: 0 20px;
+
+    border: 1px solid #c9c4ff;
+    border-radius: 12px;
+
+    color: #2415d8;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+
+    transition: border-color 0.2s ease;
+}
+
+.login-link:hover {
+    border-color: #3926ff;
+}
+
+.login-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+}
+
+
+/* ========================= */
+/* BOUTON CTA (Commencer gratuitement) */
+/* ========================= */
+
+.btn-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 46px;
+    padding: 0 22px;
+
+    border: none;
+    border-radius: 12px;
+
+    background: linear-gradient(120deg, #3926ff 0%, #1a0fb8 100%);
+
+    color: #ffffff;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.btn-cta:hover {
+    box-shadow: 0 8px 20px rgba(57, 38, 255, 0.28);
+    transform: translateY(-1px);
+}
+
+/* ========================= */
+/* HERO */
+/* ========================= */
+
+.hero {
+    width: 100%;
+    min-height: 460px;
+    padding: 42px clamp(40px, 8vw, 140px);
+
+    display: grid;
+    grid-template-columns:
+        minmax(360px, 0.9fr)
+        minmax(520px, 1.1fr);
+
+    align-items: center;
+    gap: clamp(40px, 6vw, 100px);
+
+    background:
+        radial-gradient(
+            circle at 24% 48%,
+            rgba(122, 75, 255, 0.38) 0%,
+            rgba(122, 75, 255, 0.15) 25%,
+            transparent 48%
+        ),
+        linear-gradient(
+            110deg,
+            #4e30cd 0%,
+            #0a2e85 50%,
+            #002974 100%
+        );
+
+    overflow: hidden;
+}
+
+
+/* ========================= */
+/* PARTIE GAUCHE */
+/* ========================= */
+
+.hero-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.compass {
+    position: relative;
+
+    width: min(430px, 100%);
+    aspect-ratio: 1 / 1;
+
+    filter: drop-shadow(
+        0 0 22px rgba(114, 89, 255, 0.28)
+    );
+}
+
+.compass-base,
+.compass-needle {
+    position: absolute;
+    inset: 0;
+
+    display: block;
+    width: 100%;
+    height: 100%;
+
+    object-fit: contain;
+}
+
+.compass-needle {
+    transform-origin: 50% 50%;
+    transform: rotate(-45deg);
+    translate: 2px 0;
+}
+
+.compass:hover .compass-needle {
+    animation: compass-sweep 1.25s ease-in-out;
+}
+
+@keyframes compass-sweep {
+    0% {
+        transform: rotate(-45deg);
+    }
+
+    28% {
+        transform: rotate(15deg);
+    }
+
+    58% {
+        transform: rotate(-110deg);
+    }
+
+    80% {
+        transform: rotate(-25deg);
+    }
+
+    100% {
+        transform: rotate(-45deg);
+    }
+}
+
+/* ========================= */
+/* PARTIE DROITE */
+/* ========================= */
+
+.hero-right {
+    width: 100%;
+    max-width: 650px;
+
+    color: #ffffff;
+}
+
+.hero-right h1 {
+    margin: 0 0 24px;
+
+    font-family: Arial, sans-serif;
+    font-size: clamp(48px, 4.2vw, 64px);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -1.5px;
+}
+
+.hero-right h1 span {
+    color: #7c5bf9;
+}
+
+.hero-right p {
+    max-width: 620px;
+    margin: 0 0 32px;
+
+    color: rgba(255, 255, 255, 0.94);
+
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    line-height: 1.55;
+}
+
+
+/* ========================= */
+/* ZONE DES BOUTONS */
+/* ========================= */
+
+.hero-buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+
+    gap: 28px;
+}
+
+/* ========================= */
+/* BOUTONS DU HERO */
+/* ========================= */
+
+.btn-primary,
+.btn-secondary {
+    min-width: 285px;
+    min-height: 60px;
+    padding: 0 28px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 10px;
+
+    border-radius: 12px;
+
+    font-family: Arial, sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+
+    transition:
+        transform 0.2s ease,
+        background-color 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.btn-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+}
+
+
+/* Bouton Découvrir */
+
+.btn-primary {
+    border: 1px solid rgba(255, 255, 255, 0.75);
+
+    background: rgba(0, 24, 100, 0.18);
+
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    border-color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+
+    transform: translateY(-2px);
+}
+
+
+/* Bouton Utiliser */
+
+.btn-secondary {
+    border: 1px solid #ffffff;
+
+    background: #ffffff;
+
+    color: #3023e6;
+}
+
+.btn-secondary:hover {
+    background: #f1efff;
+    border-color: #f1efff;
+
+    transform: translateY(-2px);
+}
+
+/* ========================= */
+/* MISE EN PAGE ÉTAPES + BLOC DROIT */
+/* ========================= */
+
+.journey {
+    width: min(1500px, calc(100% - 64px));
+    margin: 0 auto;
+    padding: 80px 0 0;
+
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(360px, 0.9fr);
+    grid-template-areas:
+        "header benefits"
+        "cards benefits"
+        "banner banner";
+
+    column-gap: 48px;
+    row-gap: 42px;
+}
+
+
+/* ========================= */
+/* TITRE DE LA SECTION */
+/* ========================= */
+
+.journey-header {
+    grid-area: header;
+
+    max-width: 720px;
+
+    text-align: left;
+}
+
+.journey-header h2 {
+    margin: 0 0 18px;
+
+    color: #0a1468;
+
+    font-family: Arial, sans-serif;
+    font-size: clamp(34px, 4vw, 48px);
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.journey-header p {
+    margin: 0;
+
+    color: #505273;
+
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+
+/* ========================= */
+/* CONTENEUR DES CARTES */
+/* ========================= */
+
+.journey-cards {
+    grid-area: cards;
+
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    gap: 30px;
+}
+
+
+/* ========================= */
+/* CARTE */
+/* ========================= */
+
+.journey-card {
+    min-height: 390px;
+    padding: 34px 28px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    border: 1px solid #e4e0ff;
+    border-radius: 24px;
+
+    background: #ffffff;
+
+    text-align: center;
+
+    box-shadow:
+        0 18px 45px rgba(19, 26, 102, 0.08);
+
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.journey-card:hover {
+    transform: translateY(-6px);
+
+    box-shadow:
+        0 24px 55px rgba(19, 26, 102, 0.14);
+}
+
+
+/* ========================= */
+/* ICÔNES + PASTILLE NUMÉROTÉE */
+/* ========================= */
+
+.journey-icon-wrap {
+    position: relative;
+
+    width: 190px;
+    margin: 0 auto 26px;
+}
+
+.journey-icon {
+    display: block;
+
+    width: 190px;
+    height: 190px;
+    object-fit: contain;
+}
+
+.journey-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+
+    width: 28px;
+    height: 28px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background: #3926ff;
+
+    color: #ffffff;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+
+    box-shadow: 0 4px 10px rgba(57, 38, 255, 0.35);
+}
+
+
+/* ========================= */
+/* TEXTES DES CARTES */
+/* ========================= */
+
+.journey-card h3 {
+    margin: 0 0 14px;
+
+    color: #17106f;
+
+    font-family: Arial, sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+}
+
+.journey-card p {
+    max-width: 280px;
+    margin: 0;
+
+    color: #555873;
+
+    font-family: Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+}
+
+
+/* ========================= */
+/* BLOC "POURQUOI" */
+/* ========================= */
+
+.journey-benefits {
+    grid-area: benefits;
+    align-self: stretch;
+
+    margin: 0;
+    padding: 38px 34px;
+
+    border-left: 1px solid #ded9ff;
+    border-radius: 22px;
+
+    background: linear-gradient(
+        135deg,
+        #fbfaff 0%,
+        #f1eeff 100%
+    );
+}
+
+.journey-benefits h3 {
+    margin: 0 0 28px;
+
+    color: #2d20f3;
+
+    font-family: Arial, sans-serif;
+    font-size: 20px;
+    line-height: 1.25;
+}
+
+.journey-benefits ul {
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+
+    list-style: none;
+}
+
+.journey-benefits li {
+    position: relative;
+
+    padding-left: 34px;
+
+    color: #25285f;
+
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.45;
+}
+
+.journey-benefits li::before {
+    content: "✓";
+
+    position: absolute;
+    top: 1px;
+    left: 0;
+
+    width: 20px;
+    height: 20px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 2px solid #3926ff;
+    border-radius: 50%;
+
+    color: #3926ff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+
+/* ========================= */
+/* BANDEAU S'ORIENTER / RÉUSSIR / PILOTER */
+/* ========================= */
+
+.journey-banner {
+    grid-area: banner;
+
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    gap: 30px;
+
+    padding: 40px clamp(28px, 4vw, 56px);
+    margin-bottom: 80px;
+
+    border-radius: 22px;
+
+    background: linear-gradient(
+        135deg,
+        #f5f3ff 0%,
+        #ece7ff 100%
+    );
+}
+
+.banner-item {
+    display: flex;
+    align-items: center;
+
+    gap: 18px;
+}
+
+.banner-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+
+    width: 52px;
+    height: 52px;
+
+    border-radius: 50%;
+
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(19, 26, 102, 0.1);
+}
+
+.banner-icon svg {
+    width: 26px;
+    height: 26px;
+
+    color: #3926ff;
+}
+
+.banner-text h4 {
+    margin: 0 0 4px;
+
+    color: #17106f;
+
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.banner-text p {
+    margin: 0;
+
+    color: #505273;
+
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+}
+/* ========================= */
+/* PAGE UTILISER HÉPHAÏSTOS */
+/* INTRODUCTION */
+/* ========================= */
+
+.hephaistos-page {
+    padding: 52px 0 90px;
+    background: #ffffff;
+}
+
+.hephaistos-intro {
+    width: min(1180px, calc(100% - 48px));
+    min-height: 430px;
+    margin: 0 auto;
+
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1.35fr)
+        minmax(280px, 0.65fr);
+
+    align-items: center;
+    gap: 56px;
+
+    padding: 64px 70px;
+
+    border-radius: 28px;
+
+    background:
+        radial-gradient(
+            circle at 82% 45%,
+            rgba(126, 91, 249, 0.34) 0%,
+            transparent 34%
+        ),
+        linear-gradient(
+            115deg,
+            #4e30cd 0%,
+            #12328c 52%,
+            #06286e 100%
+        );
+
+    overflow: hidden;
+}
+
+
+/* ========================= */
+/* CONTENU DE L’INTRODUCTION */
+/* ========================= */
+
+.hephaistos-intro-content {
+    max-width: 680px;
+    color: #ffffff;
+}
+
+.hephaistos-label {
+    display: inline-flex;
+    margin: 0 0 20px;
+    padding: 9px 16px;
+
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 999px;
+
+    background: rgba(255, 255, 255, 0.08);
+
+    color: #ffffff;
+
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.hephaistos-intro h1 {
+    margin: 0 0 24px;
+
+    color: #ffffff;
+
+    font-family: Arial, sans-serif;
+    font-size: clamp(42px, 5vw, 62px);
+    font-weight: 700;
+    line-height: 1.05;
+}
+
+.hephaistos-intro-text {
+    max-width: 650px;
+    margin: 0 0 34px;
+
+    color: rgba(255, 255, 255, 0.94);
+
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    line-height: 1.65;
+}
+
+
+/* ========================= */
+/* ACTIONS */
+/* ========================= */
+
+.hephaistos-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 18px;
+}
+
+.hephaistos-launch,
+.hephaistos-discover {
+    min-height: 54px;
+    padding: 0 24px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 11px;
+
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+
+    transition:
+        transform 0.2s ease,
+        background-color 0.2s ease;
+}
+
+.hephaistos-launch {
+    background: #ffffff;
+    color: #3023e6;
+}
+
+.hephaistos-discover {
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+}
+
+.hephaistos-launch:hover,
+.hephaistos-discover:hover {
+    transform: translateY(-2px);
+}
+
+.hephaistos-discover:hover {
+    background: rgba(255, 255, 255, 0.13);
+}
+
+
+/* ========================= */
+/* VISUEL */
+/* ========================= */
+
+.hephaistos-intro-visual {
+    width: min(310px, 100%);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 50%;
+
+    background: rgba(255, 255, 255, 0.1);
+    transition: transform 0.8s ease;
+
+}
+
+.hephaistos-intro-visual img {
+    display: block;
+    width: 68%;
+    height: 68%;
+    object-fit: contain;
+
+    transform-origin: 50% 80%;
+}
+
+.hephaistos-intro-visual:hover img {
+    animation: navigator-balance 1.8s ease-in-out 1;
+}
+
+@keyframes navigator-balance {
+    0% {
+        transform: translateX(0) rotate(0deg);
+    }
+
+    25% {
+        transform: translateX(-12px) rotate(-7deg);
+    }
+
+    50% {
+        transform: translateX(12px) rotate(7deg);
+    }
+
+    75% {
+        transform: translateX(-5px) rotate(-3deg);
+    }
+
+    100% {
+        transform: translateX(0) rotate(0deg);
+    }
+}
+
+.hephaistos-intro-visual img {
+    display: block;
+    width: 68%;
+    height: 68%;
+    object-fit: contain;
+}
+
+
+/* ========================= */
+/* RESPONSIVE */
+/* ========================= */
+
+@media (max-width: 850px) {
+
+    .hephaistos-page {
+        padding-top: 30px;
+    }
+
+    .hephaistos-intro {
+        grid-template-columns: 1fr;
+        padding: 48px 34px;
+        text-align: center;
+    }
+
+    .hephaistos-intro-content {
+        margin: 0 auto;
+    }
+
+    .hephaistos-intro-text {
+        margin-right: auto;
+        margin-left: auto;
+    }
+
+    .hephaistos-actions {
+        justify-content: center;
+    }
+
+    .hephaistos-intro-visual {
+        width: min(230px, 70%);
+    }
+}
+/* ========================= */
+/* PAGE UTILISER HÉPHAÏSTOS */
+/* AVANT DE COMMENCER */
+/* ========================= */
+
+.hephaistos-preparation {
+    width: min(1180px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: 88px 0 20px;
+}
+
+
+/* ========================= */
+/* TITRE DE LA SECTION */
+/* ========================= */
+
+.hephaistos-section-header {
+    max-width: 720px;
+    margin: 0 auto 52px;
+
+    text-align: center;
+}
+
+.hephaistos-section-header h2 {
+    margin: 0 0 16px;
+
+    color: #0a1468;
+
+    font-family: Arial, sans-serif;
+    font-size: clamp(34px, 4vw, 46px);
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.hephaistos-section-header p {
+    margin: 0;
+
+    color: #555873;
+
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+
+/* ========================= */
+/* CONTENEUR DES CARTES */
+/* ========================= */
+
+.preparation-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    gap: 28px;
+}
+/* ========================= */
+/* GUIDE UTILISATEUR */
+/* ========================= */
+
+.hephaistos-guide {
+    width: min(1240px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: 110px 0 90px;
+
+    font-family: Arial, sans-serif;
+}
+
+.guide-symbols {
+    position: absolute;
+    overflow: hidden;
+}
+
+
+/* ========================= */
+/* PARCOURS */
+/* ========================= */
+
+.guide-map {
+    position: relative;
+
+    max-width: 1180px;
+    margin: 0 auto;
+}
+
+.guide-road {
+    position: absolute;
+    z-index: 0;
+    top: 20px;
+    bottom: 20px;
+    left: 50%;
+
+    width: 190px;
+    height: calc(100% - 40px);
+
+    transform: translateX(-50%);
+
+    pointer-events: none;
+}
+
+.guide-road path {
+    fill: none;
+    stroke: #a9c5f5;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 7 10;
+
+    opacity: 0.72;
+}
+
+
+/* ========================= */
+/* ÉTAPE */
+/* ========================= */
+
+.guide-step {
+    position: relative;
+    z-index: 1;
+
+    min-height: 240px;
+
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr)
+        150px
+        minmax(0, 1fr);
+
+    align-items: center;
+    gap: 24px;
+
+    isolation: isolate;
+}
+
+
+/* Étapes impaires */
+
+.guide-step-1 .guide-preview,
+.guide-step-3 .guide-preview,
+.guide-step-5 .guide-preview {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.guide-step-1 .guide-waypoint,
+.guide-step-3 .guide-waypoint,
+.guide-step-5 .guide-waypoint {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.guide-step-1 .guide-copy,
+.guide-step-3 .guide-copy,
+.guide-step-5 .guide-copy {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+
+/* Étapes paires */
+
+.guide-step-2 .guide-preview,
+.guide-step-4 .guide-preview,
+.guide-step-6 .guide-preview {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+.guide-step-2 .guide-waypoint,
+.guide-step-4 .guide-waypoint,
+.guide-step-6 .guide-waypoint {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.guide-step-2 .guide-copy,
+.guide-step-4 .guide-copy,
+.guide-step-6 .guide-copy {
+    grid-column: 1;
+    grid-row: 1;
+
+    justify-self: end;
+}
+
+
+/* ========================= */
+/* APERÇUS D’HÉPHAÏSTOS */
+/* ========================= */
+
+.guide-preview {
+    position: relative;
+    z-index: 1;
+
+    width: 100%;
+    min-height: 190px;
+    margin: 0;
+    padding: 24px;
+
+    overflow: visible;
+
+    border: 1px solid #b7cdf4;
+    border-radius: 18px;
+
+    box-sizing: border-box;
+
+    box-shadow:
+        0 12px 30px
+        rgba(18, 32, 99, 0.08);
+}
+
+
+/* Progression bleue des encadrés */
+
+.guide-preview-1 {
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+
+    background-color: #f7faff;
+    background-image:
+        url("Assets/guide-import-cv.png");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+.guide-preview-1 figcaption,
+.guide-preview-1::before,
+.guide-preview-1::after {
+    display: none;
+}
+.guide-step-1::before {
+    content: "";
+
+    position: absolute;
+    z-index: 0;
+
+    top: -22px;
+    bottom: -22px;
+    left: -34px;
+
+    width: 48%;
+
+    border-radius:
+        46% 54% 58% 42%
+        / 52% 42% 58% 48%;
+
+    background: #f1ecff;
+
+    opacity: 0.72;
+
+    transform: rotate(-3deg);
+
+    pointer-events: none;
+}
+
+.guide-step-1 .guide-preview {
+    position: relative;
+    z-index: 1;
+}
+
+.guide-preview-2 {
+    min-height: 0;
+    aspect-ratio: 3 / 1;
+
+    background-color: #f2f7ff;
+    background-image:
+        url("Assets/guide-profil.png");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+}
+
+.guide-preview-2 figcaption,
+.guide-preview-2::before,
+.guide-preview-2::after {
+    display: none;
+}
+
+.guide-step-2::before {
+    content: "";
+
+    position: absolute;
+    z-index: 0;
+
+    top: -22px;
+    right: -34px;
+    bottom: -22px;
+
+    width: 48%;
+
+    border-radius:
+        54% 46% 42% 58%
+        / 46% 58% 42% 54%;
+
+    background: #eaf4ff;
+
+    opacity: 0.72;
+
+    transform: rotate(3deg);
+
+    pointer-events: none;
+}
+
+.guide-step-2 .guide-preview {
+    position: relative;
+    z-index: 1;
+}
+
+.guide-preview-3 {
+    min-height: 0;
+    aspect-ratio: 20 / 7;
+
+    background-color: #edf4ff;
+    background-image:
+        url("Assets/guide-direction.png");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+.guide-preview-3 figcaption,
+.guide-preview-3::before,
+.guide-preview-3::after {
+    display: none;
+}
+
+.guide-step-3::before {
+    content: "";
+
+    position: absolute;
+    z-index: 0;
+
+    top: -22px;
+    bottom: -22px;
+    left: -34px;
+
+    width: 48%;
+
+    border-radius:
+        46% 54% 58% 42%
+        / 52% 42% 58% 48%;
+
+    background: #eaf8f2;
+
+    opacity: 0.72;
+
+    transform: rotate(-3deg);
+
+    pointer-events: none;
+}
+
+.guide-step-3 .guide-preview {
+    position: relative;
+    z-index: 1;
+}
+
+.guide-preview-4 {
+    min-height: 0;
+    aspect-ratio: 12 / 5;
+
+    background-color: #e8f1fd;
+    background-image:
+        url("Assets/guide-recherche.png");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+.guide-preview-4 figcaption,
+.guide-preview-4::before,
+.guide-preview-4::after {
+    display: none;
+}
+
+.guide-step-4::before {
+    content: "";
+
+    position: absolute;
+    z-index: 0;
+
+    top: -22px;
+    right: -34px;
+    bottom: -22px;
+
+    width: 48%;
+
+    border-radius:
+        54% 46% 42% 58%
+        / 46% 58% 42% 54%;
+
+    background: #fff1e8;
+
+    opacity: 0.72;
+
+    transform: rotate(3deg);
+
+    pointer-events: none;
+}
+
+.guide-step-4 .guide-preview {
+    position: relative;
+    z-index: 1;
+}
+
+.guide-preview-5 {
+    min-height: 0;
+    aspect-ratio: 8 / 5;
+
+    background-color: #e3edfb;
+    background-image:
+        url("Assets/guide-offres.png");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+.guide-preview-5 figcaption,
+.guide-preview-5::before,
+.guide-preview-5::after {
+    display: none;
+}
+
+.guide-step-5::before {
+    content: "";
+
+    position: absolute;
+    z-index: 0;
+
+    top: -22px;
+    bottom: -22px;
+    left: -34px;
+
+    width: 48%;
+
+    border-radius:
+        46% 54% 58% 42%
+        / 52% 42% 58% 48%;
+
+    background: #e8f7f7;
+
+    opacity: 0.72;
+
+    transform: rotate(-3deg);
+
+    pointer-events: none;
+}
+
+.guide-step-5 .guide-preview {
+    position: relative;
+    z-index: 1;
+}
+
+.guide-preview-6 {
+    min-height: 0;
+    aspect-ratio: 3 / 2;
+
+    background-color: #dde9f9;
+    background-image:
+        url("Assets/guide-analyse.png");
+    background-position: top center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+.guide-preview-6 figcaption,
+.guide-preview-6::before,
+.guide-preview-6::after {
+    display: none;
+}
+
+.guide-step-6::before {
+    content: "";
+
+    position: absolute;
+    z-index: 0;
+
+    top: -22px;
+    right: -34px;
+    bottom: -22px;
+
+    width: 48%;
+
+    border-radius:
+        54% 46% 42% 58%
+        / 46% 58% 42% 54%;
+
+    background: #eceeff;
+
+    opacity: 0.72;
+
+    transform: rotate(3deg);
+
+    pointer-events: none;
+}
+
+.guide-step-6 .guide-preview {
+    position: relative;
+    z-index: 1;
+}
+
+
+/* Formes pastel placées derrière les encadrés */
+
+.guide-preview::before {
+    content: "";
+
+    position: absolute;
+    z-index: -1;
+    top: -26px;
+    right: 22%;
+    bottom: -20px;
+    left: -34px;
+
+    border-radius:
+        46% 54% 58% 42%
+        / 52% 42% 58% 48%;
+
+    opacity: 0.72;
+
+    transform: rotate(-3deg);
+}
+
+.guide-step:nth-child(even) .guide-preview::before {
+    right: -34px;
+    left: 22%;
+
+    transform: rotate(3deg);
+}
+
+.guide-preview-1::before {
+    background: #f1ecff;
+}
+
+.guide-preview-2::before {
+    background: #eaf4ff;
+}
+
+.guide-preview-3::before {
+    background: #eaf8f2;
+}
+
+.guide-preview-4::before {
+    background: #fff1e8;
+}
+
+.guide-preview-5::before {
+    background: #e8f7f7;
+}
+
+.guide-preview-6::before {
+    background: #eceeff;
+}
+
+
+/* Faux aperçu temporaire de l’interface */
+
+.guide-preview::after {
+    content: "";
+
+    position: absolute;
+    z-index: 1;
+    top: 62px;
+    right: 24px;
+    bottom: 24px;
+    left: 24px;
+
+    border: 1px solid rgba(91, 118, 210, 0.24);
+    border-radius: 12px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #3926ff 0 28%,
+            transparent 28%
+        )
+        18px 20px / 58% 5px no-repeat,
+
+        linear-gradient(
+            90deg,
+            #c7d5f5 0 70%,
+            transparent 70%
+        )
+        18px 40px / 72% 4px no-repeat,
+
+        linear-gradient(
+            90deg,
+            #d6e0f7 0 82%,
+            transparent 82%
+        )
+        18px 58px / 80% 4px no-repeat,
+
+        #ffffff;
+
+    box-shadow:
+        inset 0 0 0 1px
+        rgba(255, 255, 255, 0.7);
+}
+
+.guide-preview-1::after {
+    border-style: dashed;
+}
+
+.guide-preview figcaption {
+    position: relative;
+    z-index: 2;
+
+    color: #0a1468;
+
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+
+/* ========================= */
+/* VOYAGEUR ET NUMÉRO */
+/* ========================= */
+
+.guide-waypoint {
+    position: relative;
+    z-index: 3;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+}
+
+.guide-waypoint-reverse {
+    flex-direction: row;
+}
+
+.guide-traveler {
+    width: 34px;
+    height: 46px;
+
+    overflow: visible;
+
+    fill: none;
+    stroke: #0a1468;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.guide-traveler-reverse {
+    transform: scaleX(-1);
+}
+
+.guide-number {
+    width: 28px;
+    height: 28px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    flex: 0 0 28px;
+
+    border-radius: 50%;
+
+    background: #3926ff;
+    color: #ffffff;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    box-shadow:
+        0 5px 12px
+        rgba(57, 38, 255, 0.22);
+}
+
+
+/* ========================= */
+/* TEXTE DE L’ÉTAPE */
+/* ========================= */
+
+.guide-copy {
+    max-width: 320px;
+}
+
+.guide-copy h3 {
+    margin: 0 0 10px;
+
+    color: #0a1468;
+
+    font-size: clamp(22px, 2vw, 28px);
+    font-weight: 700;
+    line-height: 1.18;
+}
+
+.guide-copy p {
+    margin: 0;
+
+    color: #555873;
+
+    font-size: 16px;
+    line-height: 1.55;
+}
+
+
+/* ========================= */
+/* OFFRE EXTERNE ET BOUTON */
+/* ========================= */
+
+.guide-footer {
+    max-width: 1180px;
+    margin: 48px auto 0;
+
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr)
+        auto
+        minmax(0, 1fr);
+
+    align-items: end;
+    gap: 32px;
+}
+
+.guide-external-offer {
+    grid-column: 1;
+
+    max-width: 430px;
+}
+
+.guide-external-offer h3 {
+    margin: 0 0 10px;
+
+    color: #0a1468;
+
+    font-size: 20px;
+    line-height: 1.3;
+}
+
+.guide-external-offer p {
+    margin: 0;
+
+    color: #4e5578;
+
+    font-size: 15px;
+    line-height: 1.55;
+}
+
+.guide-curved-arrow {
+    display: block;
+
+    width: 230px;
+    height: 60px;
+    margin: 8px 0 0 auto;
+}
+
+.guide-curved-arrow path {
+    fill: none;
+    stroke: #8fa7f4;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 6 7;
+}
+
+.guide-launch {
+    grid-column: 2;
+
+    min-height: 54px;
+    padding: 0 26px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 14px;
+
+    border-radius: 12px;
+
+    background: #3926ff;
+    color: #ffffff;
+
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1;
+
+    text-decoration: none;
+
+    box-shadow:
+        0 10px 24px
+        rgba(57, 38, 255, 0.24);
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        background 0.2s ease;
+}
+
+.guide-launch:hover {
+    transform: translateY(-3px);
+
+    background: #2415d8;
+
+    box-shadow:
+        0 15px 30px
+        rgba(57, 38, 255, 0.3);
+}
+
+.guide-launch span {
+    font-size: 24px;
+    font-weight: 400;
+}
+
+
+/* ========================= */
+/* GUIDE RESPONSIVE */
+/* ========================= */
+
+@media (max-width: 900px) {
+
+    .hephaistos-guide {
+        width: min(100% - 32px, 620px);
+        padding: 82px 0 70px;
+    }
+
+    .guide-map {
+        display: grid;
+        gap: 46px;
+    }
+
+    .guide-road {
+        display: none;
+    }
+
+    .guide-step {
+        min-height: auto;
+
+        grid-template-columns: 58px minmax(0, 1fr);
+        gap: 18px 14px;
+    }
+
+    .guide-step .guide-preview {
+        grid-column: 1 / -1;
+        grid-row: 1;
+
+        width: 100%;
+    }
+
+    .guide-step .guide-waypoint {
+        grid-column: 1;
+        grid-row: 2;
+
+        align-self: start;
+    }
+
+    .guide-step .guide-copy {
+        grid-column: 2;
+        grid-row: 2;
+
+        justify-self: stretch;
+
+        max-width: none;
+    }
+
+    .guide-step:nth-child(even)
+    .guide-preview::before {
+        right: -20px;
+        left: 22%;
+    }
+
+    .guide-preview::before {
+        left: -20px;
+    }
+
+    .guide-footer {
+        margin-top: 64px;
+
+        grid-template-columns: 1fr;
+        gap: 28px;
+
+        text-align: center;
+    }
+
+    .guide-external-offer,
+    .guide-launch {
+        grid-column: 1;
+    }
+
+    .guide-external-offer {
+        max-width: 520px;
+        margin: 0 auto;
+    }
+
+    .guide-curved-arrow {
+        margin-right: auto;
+        margin-left: auto;
+    }
+
+    .guide-launch {
+        justify-self: center;
+    }
+}
+
+@media (max-width: 560px) {
+
+    .hephaistos-guide {
+        width: min(100% - 24px, 520px);
+    }
+
+    .guide-preview {
+        min-height: 170px;
+        padding: 20px;
+    }
+
+    .guide-preview::after {
+        top: 56px;
+        right: 18px;
+        bottom: 18px;
+        left: 18px;
+    }
+
+    .guide-preview figcaption {
+        font-size: 16px;
+    }
+
+    .guide-copy h3 {
+        font-size: 21px;
+    }
+
+    .guide-copy p {
+        font-size: 15px;
+    }
+
+    .guide-launch {
+        width: 100%;
+        padding-right: 18px;
+        padding-left: 18px;
+
+        box-sizing: border-box;
+    }
+}
+
+/* ========================= */
+/* CARTE DE PRÉPARATION */
+/* ========================= */
+
+.preparation-card {
+    position: relative;
+
+    min-height: 400px;
+    padding: 38px 30px 34px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    border: 1px solid #e1ddff;
+    border-radius: 22px;
+
+    background: #ffffff;
+
+    text-align: center;
+
+    box-shadow:
+        0 16px 42px rgba(19, 26, 102, 0.08);
+
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.preparation-card:hover {
+    transform: translateY(-6px);
+
+    box-shadow:
+        0 22px 50px rgba(19, 26, 102, 0.14);
+}
+
+
+/* ========================= */
+/* NUMÉRO */
+/* ========================= */
+
+.preparation-number {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+
+    width: 30px;
+    height: 30px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background: #3926ff;
+    color: #ffffff;
+
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+
+    box-shadow:
+        0 5px 12px rgba(57, 38, 255, 0.28);
+}
+
+
+/* ========================= */
+/* ICÔNES */
+/* ========================= */
+
+.preparation-card img {
+    display: block;
+
+    width: 160px;
+    height: 160px;
+    margin: 0 auto 28px;
+
+    object-fit: contain;
+}
+
+
+/* ========================= */
+/* TEXTES */
+/* ========================= */
+
+.preparation-card h3 {
+    margin: 0 0 16px;
+
+    color: #17106f;
+
+    font-family: Arial, sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.preparation-card p {
+    max-width: 300px;
+    margin: 0;
+
+    color: #555873;
+
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+
+
+
+/* ========================= */
+/* RESPONSIVE */
+/* ========================= */
+
+@media (max-width: 1050px) {
+
+    .site-nav {
+        height: auto;
+        padding: 18px 0;
+        flex-wrap: wrap;
+    }
+
+    .nav-links {
+        order: 3;
+        width: 100%;
+
+        justify-content: flex-start;
+        flex-wrap: wrap;
+
+        gap: 10px 28px;
+    }
+
+    .nav-links a {
+        min-height: 42px;
+    }
+
+    .nav-links a.active::after {
+        bottom: 2px;
+    }
+}
+
+@media (max-width: 900px) {
+
+    .journey {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "header"
+            "cards"
+            "benefits"
+            "banner";
+
+        padding: 70px 0 0;
+    }
+
+    .journey-header {
+        text-align: center;
+        margin: 0 auto;
+    }
+
+    .journey-cards {
+        grid-template-columns: 1fr;
+        max-width: 520px;
+        margin: 0 auto;
+    }
+
+    .journey-card {
+        min-height: auto;
+    }
+
+    .journey-banner {
+        grid-template-columns: 1fr;
+    }
+
+    .hephaistos-preparation {
+        padding-top: 68px;
+    }
+
+    .preparation-cards {
+        grid-template-columns: 1fr;
+
+        max-width: 540px;
+        margin: 0 auto;
+    }
+
+    .preparation-card {
+        min-height: auto;
+    }
+
+   /* ========================= */
+/* PARCOURS HÉPHAÏSTOS — MOBILE */
+/* ========================= */
+
+@media (max-width: 900px) {
+
+    .hephaistos-guide {
+        width: calc(100% - 24px);
+        overflow: hidden;
+    }
+
+    .guide-map {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .guide-step {
+        position: relative;
+        isolation: isolate;
+
+        width: 100%;
+        min-width: 0;
+
+        grid-template-columns: 54px minmax(0, 1fr);
+        grid-template-areas:
+            "preview preview"
+            "waypoint copy";
+
+        column-gap: 10px;
+        row-gap: 22px;
+    }
+
+    .guide-preview {
+        grid-area: preview !important;
+
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .guide-waypoint {
+        grid-area: waypoint !important;
+        position: relative;
+        z-index: 2;
+    }
+
+    .guide-copy {
+        grid-area: copy !important;
+        position: relative;
+        z-index: 2;
+
+        min-width: 0;
+        padding-right: 8px;
+    }
+
+    .guide-copy h3,
+    .guide-copy p {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    .guide-step::before {
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    .guide-step .guide-preview {
+        position: relative;
+        z-index: 1;
+    }
+} 
+}
