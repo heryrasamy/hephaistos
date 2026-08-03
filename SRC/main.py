@@ -58,6 +58,7 @@ logo_base64 = base64.b64encode(
 ).decode("utf-8")
 
 st.markdown(
+
     """
    <style>
     .stApp {
@@ -337,6 +338,70 @@ st.markdown(
                 translateY(0)
                 scale(1.55);
         }
+        /* ========================= */
+/* BANDEAU HÉPHAÏSTOS — MOBILE */
+/* ========================= */
+
+@media (max-width: 768px) {
+
+    .hephaistos-header {
+        width: calc(100% + 32px);
+        min-height: auto;
+        margin: 0 -16px 36px;
+        padding: 34px 24px 38px;
+
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+
+        overflow: hidden;
+    }
+
+    .hephaistos-header-content {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+
+        text-align: center;
+    }
+
+    .hephaistos-platform-name {
+        max-width: 100%;
+        margin-bottom: 20px;
+        padding: 8px 14px;
+
+        justify-content: center;
+
+        white-space: normal;
+        text-align: center;
+
+        font-size: 14px;
+        line-height: 1.35;
+    }
+
+    .hephaistos-header-title {
+        margin-bottom: 20px;
+
+        font-size: clamp(40px, 13vw, 52px);
+        line-height: 1.05;
+        letter-spacing: -0.6px;
+
+        overflow-wrap: anywhere;
+    }
+
+    .hephaistos-header-text {
+        width: 100%;
+        max-width: 100%;
+
+        font-size: 16px;
+        line-height: 1.5;
+
+        overflow-wrap: anywhere;
+    }
+
+    .hephaistos-header-visual {
+        display: none;
+    }
+}
     }
 
 
@@ -845,6 +910,90 @@ st.markdown(
             margin: 28px 0 16px;
             font-size: 24px;
         }
+        /* ========================= */
+/* BANDEAU HÉPHAÏSTOS — MOBILE */
+/* ========================= */
+
+@media screen and (max-width: 900px) {
+
+    .hephaistos-header {
+        display: block !important;
+
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        min-height: 0 !important;
+
+        margin: 0 0 32px !important;
+        padding: 30px 20px 34px !important;
+
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+    }
+
+    .hephaistos-header-content {
+        display: block !important;
+
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+
+        margin: 0 !important;
+
+        box-sizing: border-box !important;
+        text-align: center !important;
+    }
+
+    .hephaistos-platform-name {
+        display: inline-block !important;
+
+        width: auto !important;
+        max-width: 100% !important;
+
+        margin: 0 auto 18px !important;
+        padding: 8px 12px !important;
+
+        box-sizing: border-box !important;
+
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+
+        font-size: 13px !important;
+        line-height: 1.35 !important;
+        text-align: center !important;
+    }
+
+    .hephaistos-header-title {
+        width: 100% !important;
+        max-width: 100% !important;
+
+        margin: 0 0 18px !important;
+
+        font-size: clamp(38px, 12vw, 50px) !important;
+        line-height: 1.05 !important;
+        letter-spacing: -0.5px !important;
+
+        overflow-wrap: anywhere !important;
+        text-align: center !important;
+    }
+
+    .hephaistos-header-text {
+        width: 100% !important;
+        max-width: 100% !important;
+
+        margin: 0 !important;
+
+        font-size: 16px !important;
+        line-height: 1.5 !important;
+
+        overflow-wrap: anywhere !important;
+        text-align: center !important;
+    }
+
+    .hephaistos-header-visual {
+        display: none !important;
+    }
+
     }
 </style>
     """,
