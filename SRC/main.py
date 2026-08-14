@@ -1059,6 +1059,12 @@ st.markdown(
 if "offer_text" not in st.session_state:
     st.session_state["offer_text"] = ""
 
+if "cv_adaptation_direction" not in st.session_state:
+    st.session_state["cv_adaptation_direction"] = None
+
+if "cv_adaptation_analysis" not in st.session_state:
+    st.session_state["cv_adaptation_analysis"] = None
+
 if "offers_scored" not in st.session_state:
     st.session_state["offers_scored"] = []
 
@@ -1076,6 +1082,12 @@ if "last_analysis" not in st.session_state:
 
 if "suggested_keywords" not in st.session_state:
     st.session_state["suggested_keywords"] = ""
+
+if "cv_original_text" not in st.session_state:
+    st.session_state["cv_original_text"] = ""
+
+if "cv_adaptation_offer_text" not in st.session_state:
+    st.session_state["cv_adaptation_offer_text"] = ""
 
 
 # =========================================================
@@ -1889,7 +1901,8 @@ if uploaded:
         st.stop()
 
     cv_text = to_text(extract_text_from_upload(uploaded.name, file_bytes))
-
+    st.session_state["cv_original_text"] = cv_text
+ 
     # ------------------------
     # Reset seulement si nouveau fichier
     # ------------------------
@@ -1947,33 +1960,47 @@ if uploaded:
     # Résumé métier
     # ------------------------
     job_summary = build_job_inference_summary(
-        detected_families=cv_families, cv_terms=cv_terms_for_inference, top_n=3
+    detected_families=cv_families,
+    cv_terms=cv_terms_for_inference,
+    top_n=3,
+)
+    
+main_job_data = job_summary.get("main_job", {})
+related_jobs = job_summary.get("related_jobs", [])
+
+if isinstance(main_job_data, dict):
+    main_job_label = main_job_data.get(
+        "job",
+        "inconnu",
+    )
+    domain_label = main_job_data.get(
+        "domain",
+        "inconnu",
+    )
+else:
+    main_job_label = main_job_data or "inconnu"
+    domain_label = job_summary.get(
+        "domain",
+        "inconnu",
     )
 
-    main_job_data = job_summary.get("main_job", {})
-    related_jobs = job_summary.get("related_jobs", [])
+rome_candidate_terms = filter_rome_candidate_terms(
+    cv_terms_for_inference
+)
 
-    if isinstance(main_job_data, dict):
-        main_job_label = main_job_data.get("job", "inconnu")
-        domain_label = main_job_data.get("domain", "inconnu")
-    else:
-        main_job_label = main_job_data or "inconnu"
-        domain_label = job_summary.get("domain", "inconnu")
+selected_rome_terms = rank_rome_candidate_terms(
+    terms=rome_candidate_terms,
+    max_terms=5,
+)
 
-    rome_candidate_terms = filter_rome_candidate_terms(
-        cv_terms_for_inference
+rome_search_terms = []
+normalized_main_job = ""
+
+if main_job_label and main_job_label != "inconnu":
+    normalized_main_job = normalize_text(
+        main_job_label
     )
 
-    selected_rome_terms = rank_rome_candidate_terms(
-        terms=rome_candidate_terms,
-        max_terms=5,
-    )
-
-    # Le métier principal détecté est interrogé en priorité.
-    rome_search_terms = []
-
-    if main_job_label and main_job_label != "inconnu":
-        normalized_main_job = normalize_text(main_job_label)
     normalized_cv = normalize_text(cv_text)
 
     main_job_words = [
@@ -3104,10 +3131,12 @@ def show_analysis_dialog():
     else:
         st.write("Aucun mot fort détecté.")
 
-    st.markdown("### Suggestions pour améliorer le CV")
+        st.markdown("### Suggestions pour améliorer le CV")
 
     missing_competencies = analysis.get("missing_competencies", [])
-    suggestions = build_cv_suggestions_from_competencies(missing_competencies)
+    suggestions = build_cv_suggestions_from_competencies(
+        missing_competencies
+    )
 
     if suggestions:
         for suggestion in suggestions:
@@ -3116,12 +3145,29 @@ def show_analysis_dialog():
         st.write("Aucune suggestion générée.")
 
     if st.button(
+        "Adapter mon CV à cette offre",
+        key="open_cv_workshop",
+        type="primary",
+        use_container_width=True,
+    ):
+        st.session_state["cv_adaptation_offer_text"] = (
+            st.session_state.get("offer_text", "")
+        )
+
+        st.session_state["cv_adaptation_direction"] = direction_family
+
+        st.session_state["cv_adaptation_analysis"] = analysis
+
+        st.switch_page("pages/atelier_cv.py")
+
+    if st.button(
         "Fermer l’analyse",
         key="close-analysis-dialog",
         use_container_width=True,
     ):
         st.session_state["show_analysis_dialog"] = False
         st.rerun()
+
 
 if st.session_state.get("show_analysis_dialog", False):
     show_analysis_dialog()
