@@ -140,6 +140,16 @@ div[class*="st-key-backhephaistos"] button:hover {
 
     transform: translateY(-1px);
 }
+        /* Titres de niveau 3 */
+        [data-testid="stMarkdownContainer"] h3 {
+            color: #090d67 !important;
+            -webkit-text-fill-color: #090d67 !important;
+
+            font-family: Arial, sans-serif !important;
+            font-weight: 700 !important;
+
+            opacity: 1 !important;
+        }
 
     </style>
     """,
@@ -1086,6 +1096,32 @@ else:
                         "orienté le public",
                         "orienter le public",
                     ),
+                    "équipe": (
+                        "travail en équipe",
+                        "travail d’équipe",
+                        "travail d'équipe",
+                        "au sein d’une équipe",
+                        "au sein d'une équipe",
+                        "avec l’équipe",
+                        "avec l'équipe",
+                        "équipe de ",
+                        "gestion d’équipe",
+                        "gestion d'équipe",
+                        "management d’équipe",
+                        "management d'équipe",
+                        "animation d’équipe",
+                        "animation d'équipe",
+                    ),
+                    "equipe": (
+                        "travail en equipe",
+                        "travail d'equipe",
+                        "au sein d'une equipe",
+                        "avec l'equipe",
+                        "equipe de ",
+                        "gestion d'equipe",
+                        "management d'equipe",
+                        "animation d'equipe",
+                    ),
                 }
 
                 scored_experiences = []
@@ -1224,6 +1260,57 @@ else:
                         ),
                         key=f"{evidence_key}_experiences",
                     )
+
+                    current_offer_signature = str(
+                        abs(
+                            hash(
+                                offer_text
+                            )
+                        )
+                    )
+
+                    all_validated_reformulations = (
+                        st.session_state.setdefault(
+                            "cv_validated_reformulations",
+                            {},
+                        )
+                    )
+
+                    current_offer_reformulations = (
+                        all_validated_reformulations.setdefault(
+                            current_offer_signature,
+                            {},
+                        )
+                    )
+
+                    current_category_prefix = (
+                        f"{index}_{category}_"
+                    )
+
+                    active_reformulation_ids = {
+                        (
+                            f"{index}_"
+                            f"{category}_"
+                            f"{experience_index}"
+                        )
+                        for experience_index
+                        in selected_experiences
+                    }
+
+                    for stored_id in list(
+                        current_offer_reformulations.keys()
+                    ):
+                        if (
+                            stored_id.startswith(
+                                current_category_prefix
+                            )
+                            and stored_id
+                            not in active_reformulation_ids
+                        ):
+                            current_offer_reformulations.pop(
+                                stored_id,
+                                None,
+                            )
 
                     if selected_experiences:
                         selected_count = len(
@@ -1517,23 +1604,150 @@ else:
                                         )
 
                                         if selected_content:
-                                            base_text = (
+                                            base_candidate = (
                                                 selected_content[0]
                                                 .strip()
                                                 .rstrip(" .;,:")
                                             )
                                         else:
-                                            base_text = (
+                                            base_candidate = (
                                                 selected_header
                                                 .strip()
                                                 .rstrip(" .;,:")
                                             )
 
-                                        normalized_confirmed_facts = [
-                                            fact[:1].lower() + fact[1:]
-                                            for fact in confirmed_facts
-                                            if fact
-                                        ]
+                                        date_words = {
+                                            "depuis",
+                                            "debut",
+                                            "début",
+                                            "fin",
+                                            "en",
+                                            "cours",
+                                            "present",
+                                            "présent",
+                                            "au",
+                                            "a",
+                                            "à",
+                                            "de",
+                                            "du",
+                                            "janvier",
+                                            "fevrier",
+                                            "février",
+                                            "mars",
+                                            "avril",
+                                            "mai",
+                                            "juin",
+                                            "juillet",
+                                            "aout",
+                                            "août",
+                                            "septembre",
+                                            "octobre",
+                                            "novembre",
+                                            "decembre",
+                                            "décembre",
+                                        }
+
+                                        candidate_words = (
+                                            base_candidate
+                                            .casefold()
+                                            .replace("—", " ")
+                                            .replace("–", " ")
+                                            .replace("-", " ")
+                                            .replace("/", " ")
+                                            .replace("|", " ")
+                                            .split()
+                                        )
+
+                                        non_numeric_words = []
+
+                                        for candidate_word in candidate_words:
+                                            clean_candidate_word = (
+                                                candidate_word.strip(
+                                                    " .,:;()"
+                                                )
+                                            )
+
+                                            if (
+                                                clean_candidate_word
+                                                and not any(
+                                                    character.isdigit()
+                                                    for character
+                                                    in clean_candidate_word
+                                                )
+                                            ):
+                                                non_numeric_words.append(
+                                                    clean_candidate_word
+                                                )
+
+                                        candidate_contains_number = any(
+                                            character.isdigit()
+                                            for character in base_candidate
+                                        )
+
+                                        base_is_date_line = (
+                                            candidate_contains_number
+                                            and all(
+                                                word in date_words
+                                                for word
+                                                in non_numeric_words
+                                            )
+                                        )
+
+                                        if base_is_date_line:
+                                            base_text = (
+                                                selected_header
+                                                .strip()
+                                                .rstrip(" .;,:")
+                                            )
+                                        else:
+                                            base_text = base_candidate
+
+                                        soft_skill_wording = {
+                                            (
+                                                "Adaptabilité face "
+                                                "aux situations"
+                                            ): (
+                                                "l’adaptabilité face "
+                                                "aux situations"
+                                            ),
+                                            (
+                                                "Polyvalence dans "
+                                                "les missions"
+                                            ): (
+                                                "la polyvalence dans "
+                                                "les missions"
+                                            ),
+                                            "Autonomie": "l’autonomie",
+                                            (
+                                                "Travail en équipe"
+                                            ): (
+                                                "le travail en équipe"
+                                            ),
+                                            "Rigueur": "la rigueur",
+                                        }
+
+                                        if category == "soft_skill":
+                                            normalized_confirmed_facts = [
+                                                soft_skill_wording.get(
+                                                    fact,
+                                                    (
+                                                        fact[:1].lower()
+                                                        + fact[1:]
+                                                    ),
+                                                )
+                                                for fact in confirmed_facts
+                                                if fact
+                                            ]
+                                        else:
+                                            normalized_confirmed_facts = [
+                                                (
+                                                    fact[:1].lower()
+                                                    + fact[1:]
+                                                )
+                                                for fact
+                                                in confirmed_facts
+                                                if fact
+                                            ]
 
                                         if (
                                             len(
@@ -1695,22 +1909,36 @@ else:
                                                 edited_reformulation.strip()
                                             )
 
-                                            if (
+                                            validation_is_current = (
                                                 stored_text == current_text
                                                 and stored_facts
                                                 == list(confirmed_facts)
-                                            ):
+                                            )
+
+                                            if validation_is_current:
                                                 st.success(
                                                     "Reformulation validée "
                                                     "et conservée."
                                                 )
+
                                             else:
+                                                offer_reformulations.pop(
+                                                    reformulation_id,
+                                                    None,
+                                                )
+
                                                 st.warning(
                                                     "La proposition a été "
-                                                    "modifiée depuis sa "
-                                                    "dernière validation. "
+                                                    "modifiée. Sa précédente "
+                                                    "validation a été annulée. "
                                                     "Valide-la de nouveau."
                                                 )
+
+                                        else:
+                                            st.info(
+                                                "Cette reformulation n’est "
+                                                "pas encore validée."
+                                            )
 
                                     else:
                                         st.info(
@@ -1723,13 +1951,137 @@ else:
                                         "La confirmation guidée pour cette "
                                         "catégorie sera ajoutée après le "
                                         "filtrage de ses termes spécifiques."
-                                    )          
+                                    )
 
                     else:
                         st.info(
                             "Aucune expérience ne sera utilisée "
                             "tant que tu n’en as pas sélectionné."
                         )
+
+summary_offer_signature = str(
+    abs(
+        hash(
+            offer_text
+        )
+    )
+)
+
+all_saved_reformulations = (
+    st.session_state.get(
+        "cv_validated_reformulations",
+        {},
+    )
+)
+
+saved_offer_reformulations = (
+    all_saved_reformulations.get(
+        summary_offer_signature,
+        {},
+    )
+)
+
+valid_summary_items = {
+    reformulation_id: reformulation
+    for reformulation_id, reformulation
+    in saved_offer_reformulations.items()
+    if (
+        isinstance(reformulation, dict)
+        and reformulation.get(
+            "validated_text",
+            "",
+        ).strip()
+    )
+}
+
+
+if valid_summary_items:
+    st.markdown(
+        "### Synthèse des reformulations validées"
+    )
+
+    validated_count = len(
+        valid_summary_items
+    )
+
+    if validated_count == 1:
+        summary_message = (
+            "1 reformulation validée est prête "
+            "pour le futur CV adapté."
+        )
+    else:
+        summary_message = (
+            f"{validated_count} reformulations validées "
+            "sont prêtes pour le futur CV adapté."
+        )
+
+    st.success(
+        summary_message
+    )
+
+    for reformulation in (
+        valid_summary_items.values()
+    ):
+        experience_header = reformulation.get(
+            "experience_header",
+            "Expérience",
+        )
+
+        reformulation_label = reformulation.get(
+            "label",
+            "Axe d’adaptation",
+        )
+
+        original_text = reformulation.get(
+            "original_text",
+            "",
+        )
+
+        validated_text = reformulation.get(
+            "validated_text",
+            "",
+        )
+
+        confirmed_facts = reformulation.get(
+            "confirmed_facts",
+            [],
+        )
+
+        with st.container(border=True):
+            st.markdown(
+                f"**{experience_header}**"
+            )
+
+            st.caption(
+                f"Axe travaillé : {reformulation_label}"
+            )
+
+            if original_text:
+                st.markdown(
+                    "**Texte utilisé comme base**"
+                )
+
+                st.write(
+                    original_text
+                )
+
+            st.markdown(
+                "**Version validée**"
+            )
+
+            st.write(
+                validated_text
+            )
+
+            if confirmed_facts:
+                st.markdown(
+                    "**Faits confirmés**"
+                )
+
+                for confirmed_fact in confirmed_facts:
+                    st.write(
+                        f"✓ {confirmed_fact}"
+                    )
 if st.button(
     "Retour à Héphaïstos",
     key="backhephaistos",
