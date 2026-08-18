@@ -1603,12 +1603,20 @@ else:
                                             "Aucun autre élément ne sera ajouté."
                                         )
 
-                                        if selected_content:
+                                        if matching_details:
+                                            base_candidate = (
+                                                matching_details[0]
+                                                .strip()
+                                                .rstrip(" .;,:")
+                                            )
+
+                                        elif selected_content:
                                             base_candidate = (
                                                 selected_content[0]
                                                 .strip()
                                                 .rstrip(" .;,:")
                                             )
+
                                         else:
                                             base_candidate = (
                                                 selected_header
@@ -2082,6 +2090,327 @@ if valid_summary_items:
                     st.write(
                         f"✓ {confirmed_fact}"
                     )
+
+preview_state_key = (
+    f"show_cv_preview_"
+    f"{summary_offer_signature}"
+)
+
+
+if valid_summary_items:
+    preview_is_visible = st.session_state.get(
+        preview_state_key,
+        False,
+    )
+
+    if preview_is_visible:
+        preview_button_label = (
+            "Masquer la prévisualisation"
+        )
+    else:
+        preview_button_label = (
+            "Prévisualiser mon CV adapté"
+        )
+
+    if st.button(
+        preview_button_label,
+        key=f"toggle_cv_preview_{summary_offer_signature}",
+    ):
+        st.session_state[preview_state_key] = not preview_is_visible
+        st.rerun()
+
+    if preview_is_visible:
+        clean_preview_lines = []
+        first_preview_line = ""
+
+        for raw_line in cv_original_text.splitlines():
+            clean_preview_line = " ".join(
+                raw_line.split()
+            )
+            pdf_bullet_detected = False
+
+            while clean_preview_line and (
+                0xF000 <= ord(clean_preview_line[0]) <= 0xF8FF
+                or clean_preview_line[0]
+                in {"▪", "▫", "●", "○", "■", "□"}
+            ):
+                clean_preview_line = clean_preview_line[1:].lstrip()
+                pdf_bullet_detected = True
+
+            if pdf_bullet_detected and clean_preview_line:
+                clean_preview_line = f"• {clean_preview_line}"
+
+            if clean_preview_line:
+                if not first_preview_line:
+                    first_preview_line = clean_preview_line
+                elif clean_preview_line == first_preview_line:
+                    continue
+
+                clean_preview_lines.append(clean_preview_line)
+        if (
+            clean_preview_lines
+            and clean_preview_lines[-1].endswith(" pdf")
+        ):
+            clean_preview_lines[-1] = (
+                clean_preview_lines[-1][:-4].rstrip()
+            )
+        preview_cv_text = "\n".join(
+            clean_preview_lines
+        )
+
+        reformulations_by_original = {}
+
+        for reformulation in valid_summary_items.values():
+            raw_original_text = str(
+                reformulation.get(
+                    "original_text",
+                    "",
+                )
+            ).strip()
+
+            if not raw_original_text:
+                continue
+
+            preview_original_text = raw_original_text
+            preview_bullet_detected = False
+
+            while preview_original_text and (
+                0xF000
+                <= ord(preview_original_text[0])
+                <= 0xF8FF
+                or preview_original_text[0]
+                in {"▪", "▫", "●", "○", "■", "□"}
+            ):
+                preview_original_text = (
+                    preview_original_text[1:].lstrip()
+                )
+                preview_bullet_detected = True
+
+            if (
+                preview_bullet_detected
+                and preview_original_text
+            ):
+                preview_original_text = (
+                    f"• {preview_original_text}"
+                )
+
+            preview_reformulation = dict(reformulation)
+
+            validated_text = str(
+                reformulation.get(
+                    "validated_text",
+                    "",
+                )
+            ).strip()
+
+            if validated_text.startswith(raw_original_text):
+                preview_reformulation["validated_text"] = (
+                    preview_original_text
+                    + validated_text[
+                        len(raw_original_text):
+                    ]
+                )
+
+            reformulations_by_original.setdefault(
+                preview_original_text,
+                [],
+            ).append(preview_reformulation)
+
+        preview_warnings = []
+
+        for original_text, related_reformulations in (
+            reformulations_by_original.items()
+        ):
+            if original_text not in preview_cv_text:
+                preview_warnings.append(
+                    "La reformulation concernant "
+                    f"« {original_text} » n’a pas pu "
+                    "être replacée automatiquement."
+                )
+                continue
+            replacement_target = original_text
+
+            original_position = (
+                preview_cv_text.find(
+                    original_text
+                )
+            )
+
+            punctuation_position = (
+                original_position
+                + len(original_text)
+            )
+
+            if (
+                original_position >= 0
+                and punctuation_position
+                < len(preview_cv_text)
+                and preview_cv_text[
+                    punctuation_position
+                ]
+                in ".;,:"
+            ):
+                replacement_target += (
+                    preview_cv_text[
+                        punctuation_position
+                    ]
+                )
+
+            if len(related_reformulations) == 1:
+                validated_text = str(
+                    related_reformulations[0].get(
+                        "validated_text",
+                        "",
+                    )
+                ).strip()
+
+                if validated_text:
+                    preview_cv_text = preview_cv_text.replace(
+                        replacement_target,
+                        validated_text,
+                        1,
+                    )
+
+                continue
+
+            merged_confirmed_facts = []
+            seen_confirmed_facts = set()
+
+            for reformulation in related_reformulations:
+                for confirmed_fact in reformulation.get(
+                    "confirmed_facts",
+                    [],
+                ):
+                    clean_confirmed_fact = str(
+                        confirmed_fact
+                    ).strip().rstrip(
+                        " .;"
+                    )
+
+                    normalized_confirmed_fact = (
+                        clean_confirmed_fact.casefold()
+                    )
+
+                    if (
+                        clean_confirmed_fact
+                        and normalized_confirmed_fact
+                        not in seen_confirmed_facts
+                    ):
+                        seen_confirmed_facts.add(
+                            normalized_confirmed_fact
+                        )
+                        merged_confirmed_facts.append(
+                            clean_confirmed_fact
+                        )
+
+            base_text_for_merge = original_text.rstrip(
+                " .;"
+            )
+
+            normalized_base_text = (
+                base_text_for_merge.casefold()
+            )
+
+            facts_to_append = []
+
+            for confirmed_fact in merged_confirmed_facts:
+                normalized_confirmed_fact = (
+                    confirmed_fact.casefold()
+                )
+
+                fact_is_already_visible = (
+                    normalized_confirmed_fact
+                    in normalized_base_text
+                )
+
+                if (
+                    normalized_confirmed_fact
+                    == "autonomie"
+                    and "autonom" in normalized_base_text
+                ):
+                    fact_is_already_visible = True
+
+                if (
+                    normalized_confirmed_fact
+                    == "respect des délais"
+                    and "délai" in normalized_base_text
+                ):
+                    fact_is_already_visible = True
+
+                if not fact_is_already_visible:
+                    displayed_fact = (
+                        confirmed_fact[0].lower()
+                        + confirmed_fact[1:]
+                    )
+
+                    facts_to_append.append(
+                        displayed_fact
+                    )
+
+            if facts_to_append:
+                if len(facts_to_append) == 1:
+                    joined_facts = facts_to_append[0]
+
+                else:
+                    joined_facts = (
+                        ", ".join(facts_to_append[:-1])
+                        + " et "
+                        + facts_to_append[-1]
+                    )
+
+                merged_text = (
+                    f"{base_text_for_merge} ; "
+                    f"{joined_facts}."
+                )
+
+            else:
+                merged_text = (
+                    f"{base_text_for_merge}."
+                )
+
+            preview_cv_text = preview_cv_text.replace(
+                replacement_target,
+                merged_text,
+                1,
+            )
+
+            # No additional replacement is attempted when multiple
+            # reformulations must be merged; this is delegated to the
+            # earlier fusion logic above.
+
+        st.markdown(
+            "### Prévisualisation textuelle du CV adapté"
+        )
+
+        st.caption(
+            "Cette prévisualisation modifie uniquement "
+            "une copie du texte extrait. Le CV original "
+            "reste inchangé."
+        )
+
+        preview_signature = abs(
+            hash(
+                preview_cv_text
+            )
+        )
+
+        st.text_area(
+            "Contenu prévisualisé",
+            value=preview_cv_text,
+            height=620,
+            disabled=True,
+            key=(
+                f"adapted_cv_preview_"
+                f"{summary_offer_signature}_"
+                f"{preview_signature}"
+            ),
+        )
+
+        for preview_warning in preview_warnings:
+            st.warning(
+                preview_warning
+            )
+
 if st.button(
     "Retour à Héphaïstos",
     key="backhephaistos",
