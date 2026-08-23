@@ -2380,16 +2380,6 @@ if st.button("Rechercher et classer"):
                 score_value = int(result.get("score", 0) or 0)
                 matched_terms = result.get("matched_terms", []) or []
                 missing_terms = result.get("missing_terms", []) or []
-
-                realistic_summary = build_realistic_opportunity_summary(
-                    score=score_value,
-                    cv_text=to_text(cv_text),
-                    offer_title=offer_title,
-                    offer_text=offer_description,
-                    cv_terms=extract_terms(to_text(cv_text)),
-                    offer_terms=extract_terms(offer_description),
-                )
-
                 offer_families = get_top_cv_families(description)
                 o["offer_families"] = offer_families
 
@@ -2556,6 +2546,14 @@ if st.button("Rechercher et classer"):
                     adjusted_score -= 6
 
                 adjusted_score = max(0, min(100, adjusted_score))
+                realistic_summary = build_realistic_opportunity_summary(
+                    score=adjusted_score,
+                    cv_text=to_text(cv_text),
+                    offer_title=offer_title,
+                    offer_text=offer_description,
+                    cv_terms=extract_terms(to_text(cv_text)),
+                    offer_terms=extract_terms(offer_description),
+                )
 
                 o["score"] = adjusted_score
                 o["base_score"] = score_value
@@ -3145,7 +3143,7 @@ def show_analysis_dialog():
         st.write("Aucune suggestion générée.")
 
     if st.button(
-        "Adapter mon CV à cette offre",
+        "Ouvrir l'Atelier CV",
         key="open_cv_workshop",
         type="primary",
         use_container_width=True,

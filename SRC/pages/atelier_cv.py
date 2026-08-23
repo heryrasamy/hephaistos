@@ -1,6 +1,9 @@
 import base64
+from io import BytesIO
 from pathlib import Path
+import re
 
+from PIL import Image, UnidentifiedImageError
 import streamlit as st
 
 st.set_page_config(
@@ -303,7 +306,7 @@ st.image(
 )
 
 
-st.markdown("## Adapter mon CV à cette offre")
+st.markdown("## L'Atelier CV")
 
 cv_original_text = st.session_state.get(
     "cv_original_text",
@@ -420,19 +423,18 @@ st.html(
                 transform: translateX(50%);
             }
         }
-    <    </style>
+    </style>
 
-    <div class="cv-construction-banner">
-        <div class="cv-construction-title">
-            Atelier CV en construction
-        </div>
+                    <div class="cv-construction-banner">
+                        <div class="cv-construction-title">
+                    Construis ton CV adapté, étape par étape
+                </div>
 
-        <div class="cv-construction-text">
-             Le chantier avance : le CV, l’offre, la direction
-             et l’analyse sont correctement transmis.
-             Les fonctions d’adaptation et de prévisualisation
-             sont en développement.
-        </div>
+                <div class="cv-construction-text">
+                    Héphaïstos t’aide à mettre en valeur les éléments
+                    réels de ton parcours, sans inventer d’expérience
+                    ni modifier ton CV original.
+                </div>
 
                         <div class="cv-sailing-area" aria-hidden="true">
             <img
@@ -698,196 +700,134 @@ def extract_experience_blocks(cv_text):
         if clean_line:
             clean_lines.append(clean_line)
 
-    experience_blocks = []
+        experience_blocks = []
     current_block = []
+    pending_header_lines = []
     inside_experience_section = False
 
-    for line in clean_lines:
-        normalized_line = normalize_heading(
-            line
-        )
-
-        if not inside_experience_section:
-            if normalized_line in start_headings:
-                inside_experience_section = True
-
-            continue
-
-        if normalized_line in stop_headings:
-            break
-
-        if is_employer_header(line):
-            if current_block:
-                experience_blocks.append(
-                    {
-                        "header": current_block[0],
-                        "content": current_block[1:],
-                    }
-                )
-
-            current_block = [line]
-
-        elif current_block:
-            current_block.append(line)
-
-    if current_block:
-        experience_blocks.append(
-            {
-                "header": current_block[0],
-                "content": current_block[1:],
-            }
-        )
-
-    return experience_blocks
-
-
-experience_blocks = extract_experience_blocks(
-    cv_original_text
-)
-
-
-heading_translation = str.maketrans(
-    {
-        "à": "a",
-        "â": "a",
-        "ä": "a",
-        "ç": "c",
-        "é": "e",
-        "è": "e",
-        "ê": "e",
-        "ë": "e",
-        "î": "i",
-        "ï": "i",
-        "ô": "o",
-        "ö": "o",
-        "ù": "u",
-        "û": "u",
-        "ü": "u",
-        "ÿ": "y",
-        "œ": "oe",
-    }
-)
-
-
-def normalize_heading(text):
-    normalized_text = (
-        str(text)
-        .casefold()
-        .translate(heading_translation)
-        .replace("’", "'")
+    employment_period_pattern = re.compile(
+        r"\b(?:19|20)\d{2}\b"
     )
 
-    return " ".join(
-        normalized_text.split()
-    ).strip(" :.-")
+    employment_markers = (
+        "depuis",
+        "aujourd'hui",
+        "aujourd’hui",
+        "present",
+        "présent",
+        "en cours",
+        "janvier",
+        "fevrier",
+        "février",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "aout",
+        "août",
+        "septembre",
+        "octobre",
+        "novembre",
+        "decembre",
+        "décembre",
+        "cdi",
+        "cdd",
+        "freelance",
+        "stage",
+        "alternance",
+        "interim",
+        "intérim",
+    )
 
-
-def is_employer_header(line):
-    header_part = line
-
-    for separator in (
-        "—",
+    header_separators = (
+        "|",
+        " — ",
         " – ",
-        " | ",
-        " - ",
-    ):
-        if separator in header_part:
-            header_part = header_part.split(
-                separator,
-                1,
-            )[0].strip()
-            break
-
-    letters = [
-        character
-        for character in header_part
-        if character.isalpha()
-    ]
-
-    if len(letters) < 3:
-        return False
-
-    uppercase_ratio = (
-        sum(
-            character.isupper()
-            for character in letters
-        )
-        / len(letters)
     )
 
-    return (
-        uppercase_ratio >= 0.80
-        and len(header_part) <= 90
-    )
-
-
-def extract_experience_blocks(cv_text):
-    start_headings = {
-        "experience professionnelle",
-        "experiences professionnelles",
-        "parcours professionnel",
+    non_header_lines = {
+        "mission",
+        "missions",
+        "responsabilite",
+        "responsabilites",
+        "responsabilité",
+        "responsabilités",
+        "tache",
+        "taches",
+        "tâche",
+        "tâches",
     }
 
-    stop_headings = {
-        "projet",
-        "projets",
-        "projet technique",
-        "competence",
-        "competences",
-        "formation",
-        "formations",
-        "diplome",
-        "diplomes",
-        "langue",
-        "langues",
-        "centre d'interet",
-        "centres d'interet",
-        "informations complementaires",
-    }
-
-    clean_lines = []
-
-    for raw_line in cv_text.splitlines():
-        clean_line = " ".join(
-            raw_line.split()
+    def line_has_employment_period(candidate):
+        normalized_candidate = normalize_heading(
+            candidate
         )
 
-        if clean_line:
-            clean_lines.append(clean_line)
-
-    experience_blocks = []
-    current_block = []
-    inside_experience_section = False
-
-    for line in clean_lines:
-        normalized_line = normalize_heading(
-            line
-        )
-
-        if not inside_experience_section:
-            if normalized_line in start_headings:
-                inside_experience_section = True
-
-            continue
-
-        if normalized_line in stop_headings:
-            break
-
-        if is_employer_header(line):
-            if current_block:
-                experience_blocks.append(
-                    {
-                        "header": current_block[0],
-                        "content": current_block[1:],
-                    }
+        return (
+            bool(
+                employment_period_pattern.search(
+                    normalized_candidate
                 )
+            )
+            or any(
+                marker in normalized_candidate
+                for marker in employment_markers
+            )
+        )
 
-            current_block = [line]
+    def line_has_header_separator(candidate):
+        return any(
+            separator in candidate
+            for separator in header_separators
+        )
 
-        elif current_block:
-            current_block.append(line)
+    def line_can_be_header_fragment(candidate):
+        normalized_candidate = normalize_heading(
+            candidate
+        )
 
-    if current_block:
+        if (
+            not normalized_candidate
+            or normalized_candidate
+            in non_header_lines
+        ):
+            return False
+
+        if (
+            "@" in candidate
+            or "telephone" in normalized_candidate
+            or "téléphone" in normalized_candidate
+            or "numero" in normalized_candidate
+            or "numéro" in normalized_candidate
+        ):
+            return False
+
+        candidate_words = candidate.split()
+
+        if (
+            len(candidate) > 150
+            or len(candidate_words) > 18
+        ):
+            return False
+
+        if candidate.rstrip().endswith(
+            (
+                ".",
+                ";",
+                ":",
+            )
+        ):
+            return False
+
+        return True
+
+    def save_current_block():
+        nonlocal current_block
+
+        if not current_block:
+            return
+
         experience_blocks.append(
             {
                 "header": current_block[0],
@@ -895,13 +835,268 @@ def extract_experience_blocks(cv_text):
             }
         )
 
+        current_block = []
+
+    for line in clean_lines:
+        normalized_line = normalize_heading(
+            line
+        )
+
+        if not inside_experience_section:
+            heading_words = set(
+                normalized_line.split()
+            )
+
+            experience_words = {
+                "experience",
+                "experiences",
+                "expérience",
+                "expériences",
+            }
+
+            professional_words = {
+                "professionnel",
+                "professionnelle",
+                "professionnels",
+                "professionnelles",
+            }
+
+            career_words = {
+                "carriere",
+                "carrière",
+                "emploi",
+                "emplois",
+            }
+
+            is_short_heading = (
+                1 <= len(heading_words) <= 5
+            )
+
+            generalized_experience_heading = (
+                is_short_heading
+                and (
+                    bool(
+                        heading_words
+                        & experience_words
+                    )
+                    or (
+                        "parcours" in heading_words
+                        and bool(
+                            heading_words
+                            & professional_words
+                        )
+                    )
+                    or bool(
+                        heading_words
+                        & career_words
+                    )
+                    or (
+                        "work" in heading_words
+                        and "experience"
+                        in heading_words
+                    )
+                    or (
+                        "employment"
+                        in heading_words
+                        and "history"
+                        in heading_words
+                    )
+                )
+            )
+
+            if (
+                normalized_line in start_headings
+                or generalized_experience_heading
+            ):
+                inside_experience_section = True
+
+            continue
+
+        if normalized_line in stop_headings:
+            if pending_header_lines and current_block:
+                current_block.extend(
+                    pending_header_lines
+                )
+
+            pending_header_lines = []
+            break
+
+        strong_header_detected = (
+            is_employer_header(line)
+        )
+
+        period_detected = (
+            line_has_employment_period(line)
+        )
+
+        separator_detected = (
+            line_has_header_separator(line)
+        )
+
+        header_fragment_detected = (
+            line_can_be_header_fragment(line)
+        )
+
+        if strong_header_detected:
+            if pending_header_lines and current_block:
+                current_block.extend(
+                    pending_header_lines
+                )
+
+            pending_header_lines = []
+
+            save_current_block()
+            current_block = [line]
+            continue
+
+        if period_detected:
+            if (
+                current_block
+                and len(current_block) == 1
+                and not pending_header_lines
+            ):
+                current_block.append(line)
+                continue
+
+            if pending_header_lines:
+                save_current_block()
+
+                combined_header = " ".join(
+                    pending_header_lines
+                    + [line]
+                )
+
+                current_block = [
+                    combined_header
+                ]
+
+                pending_header_lines = []
+                continue
+
+            if separator_detected or not current_block:
+                save_current_block()
+                current_block = [line]
+
+            else:
+                current_block.append(line)
+
+            continue
+
+        if (
+            separator_detected
+            and header_fragment_detected
+        ):
+            if pending_header_lines and current_block:
+                current_block.extend(
+                    pending_header_lines
+                )
+
+            pending_header_lines = [line]
+            continue
+
+        if header_fragment_detected:
+            pending_header_lines.append(line)
+
+            if len(pending_header_lines) > 2:
+                oldest_pending_line = (
+                    pending_header_lines.pop(0)
+                )
+
+                if current_block:
+                    current_block.append(
+                        oldest_pending_line
+                    )
+
+            continue
+
+        if pending_header_lines:
+            if current_block:
+                current_block.extend(
+                    pending_header_lines
+                )
+
+            pending_header_lines = []
+
+        if current_block:
+            current_block.append(line)
+
+    if pending_header_lines and current_block:
+        current_block.extend(
+            pending_header_lines
+        )
+
+    save_current_block()
+
+    for experience_block in experience_blocks:
+        merged_content = []
+
+        for content_line in experience_block.get(
+            "content",
+            [],
+        ):
+            clean_content_line = " ".join(
+                content_line.split()
+            ).strip()
+
+            if not clean_content_line:
+                continue
+
+            normalized_content_line = (
+                clean_content_line.casefold()
+            )
+
+            continuation_starts = (
+                "de ",
+                "du ",
+                "des ",
+                "d’",
+                "d'",
+                "à ",
+                "au ",
+                "aux ",
+                "en ",
+                "et ",
+                "ou ",
+                "avec ",
+                "pour ",
+            )
+
+            line_is_continuation = (
+                clean_content_line[0].islower()
+                or normalized_content_line.startswith(
+                    continuation_starts
+                )
+            )
+
+            previous_line_is_closed = (
+                bool(merged_content)
+                and merged_content[-1].rstrip().endswith(
+                    (".", ";", ":")
+                )
+            )
+
+            if (
+                merged_content
+                and line_is_continuation
+                and not previous_line_is_closed
+            ):
+                merged_content[-1] = (
+                    f"{merged_content[-1]} "
+                    f"{clean_content_line}"
+                )
+            else:
+                merged_content.append(
+                    clean_content_line
+                )
+
+        experience_block["content"] = merged_content
+
     return experience_blocks
 
 
 experience_blocks = extract_experience_blocks(
     cv_original_text
 )
-
 
 missing_competencies = []
 
@@ -1051,8 +1246,24 @@ else:
                     [],
                 )
 
-                if not isinstance(source_terms, list):
+                if isinstance(source_terms, str):
+                    source_terms = [
+                        source_terms
+                    ]
+
+                elif not isinstance(
+                    source_terms,
+                    (
+                        list,
+                        tuple,
+                        set,
+                    ),
+                ):
                     source_terms = []
+
+                source_terms = list(
+                    source_terms
+                )
 
                 ignored_terms = {
                     "travail",
@@ -1066,12 +1277,61 @@ else:
                     "information",
                 }
 
+                generic_dynamic_terms = {
+                    "besoin",
+                    "point",
+                    "axe",
+                    "competence",
+                    "compétence",
+                    "competences",
+                    "compétences",
+                    "metier",
+                    "métier",
+                    "specifique",
+                    "spécifique",
+                    "professionnel",
+                    "professionnelle",
+                    "professionnels",
+                    "professionnelles",
+                }
+
+                dynamic_search_terms = []
+
+                if category not in evidence_terms_by_category:
+                    dynamic_term_text = (
+                        str(category).replace(
+                            "_",
+                            " ",
+                        )
+                        + " "
+                        + str(label)
+                    )
+
+                    for dynamic_term in re.findall(
+                        r"[^\W_]+",
+                        dynamic_term_text.casefold(),
+                        flags=re.UNICODE,
+                    ):
+                        if (
+                            len(dynamic_term) >= 4
+                            and dynamic_term
+                            not in ignored_terms
+                            and dynamic_term
+                            not in generic_dynamic_terms
+                            and dynamic_term
+                            not in dynamic_search_terms
+                        ):
+                            dynamic_search_terms.append(
+                                dynamic_term
+                            )
+
                 raw_search_terms = (
                     evidence_terms_by_category.get(
                         category,
                         [],
                     )
                     + source_terms
+                    + dynamic_search_terms
                 )
 
                 search_terms = []
@@ -1080,14 +1340,20 @@ else:
                     if not isinstance(term, str):
                         continue
 
-                    normalized_term = term.casefold().strip()
+                    normalized_term = (
+                        term.casefold().strip()
+                    )
 
                     if (
                         len(normalized_term) >= 4
-                        and normalized_term not in ignored_terms
-                        and normalized_term not in search_terms
+                        and normalized_term
+                        not in ignored_terms
+                        and normalized_term
+                        not in search_terms
                     ):
-                        search_terms.append(normalized_term)
+                        search_terms.append(
+                            normalized_term
+                        )
 
                 controlled_term_variants = {
                     "orient": (
@@ -1503,8 +1769,74 @@ else:
                                         "si tu confirmes ci-dessous un fait "
                                         "réel appartenant à cette expérience."
                                     )
+                                experience_fact_options = []
+                                seen_experience_facts = set()
+
+                                for fact_candidate in selected_content:
+                                    clean_fact_candidate = " ".join(
+                                        str(fact_candidate).split()
+                                    ).strip()
+
+                                    normalized_fact_candidate = (
+                                        clean_fact_candidate.casefold()
+                                    )
+
+                                    candidate_is_contact = (
+                                        "@"
+                                        in normalized_fact_candidate
+                                        or "téléphone"
+                                        in normalized_fact_candidate
+                                        or "telephone"
+                                        in normalized_fact_candidate
+                                        or "numéro"
+                                        in normalized_fact_candidate
+                                        or "numero"
+                                        in normalized_fact_candidate
+                                    )
+
+                                    candidate_is_metadata = (
+                                        clean_fact_candidate.count("|")
+                                        >= 2
+                                        and any(
+                                            character.isdigit()
+                                            for character
+                                            in clean_fact_candidate
+                                        )
+                                    )
+
+                                    candidate_has_enough_content = (
+                                        len(
+                                            clean_fact_candidate.split()
+                                        )
+                                        >= 3
+                                        and sum(
+                                            character.isalpha()
+                                            for character
+                                            in clean_fact_candidate
+                                        )
+                                        >= 10
+                                    )
+
+                                    if (
+                                        clean_fact_candidate
+                                        and candidate_has_enough_content
+                                        and not candidate_is_contact
+                                        and not candidate_is_metadata
+                                        and normalized_fact_candidate
+                                        not in seen_experience_facts
+                                    ):
+                                        seen_experience_facts.add(
+                                            normalized_fact_candidate
+                                        )
+
+                                        experience_fact_options.append(
+                                            clean_fact_candidate
+                                        )
 
                                 guided_facts_by_category = {
+                                    "specifique_metier": (
+                                        experience_fact_options
+                                    ),
                                     "soft_skill": [
                                         "Adaptabilité face aux situations",
                                         "Polyvalence dans les missions",
@@ -1534,12 +1866,27 @@ else:
                                     ],
                                 }
 
-                                guided_fact_options = (
+                                guided_fact_options = list(
                                     guided_facts_by_category.get(
                                         category,
                                         [],
                                     )
                                 )
+
+                                if not guided_fact_options:
+                                    guided_fact_options = list(
+                                        experience_fact_options
+                                    )
+
+                                if not guided_fact_options:
+                                    clean_label = " ".join(
+                                        str(label).split()
+                                    ).strip()
+
+                                    if clean_label:
+                                        guided_fact_options = [
+                                            clean_label
+                                        ]
 
                                 if guided_fact_options:
                                     st.markdown(
@@ -1794,6 +2141,10 @@ else:
                                                 "responsabilités incluant "
                                                 f"{joined_facts}."
                                             )
+                                        elif category == "specifique_metier":
+                                            proposed_reformulation = (
+                                                f"{base_text}."
+                                            )
 
                                         else:
                                             proposed_reformulation = (
@@ -2002,7 +2353,6 @@ valid_summary_items = {
     )
 }
 
-
 if valid_summary_items:
     st.markdown(
         "### Synthèse des reformulations validées"
@@ -2102,6 +2452,239 @@ if valid_summary_items:
         preview_state_key,
         False,
     )
+
+    st.markdown("### Choisir la présentation du CV")
+
+    st.caption(
+        "Sélectionne le modèle qui servira à la future "
+        "mise en page. Le contenu du CV reste inchangé."
+    )
+
+    template_cap_path = (
+        project_root
+        / "Assets"
+        / "modele-cv-cap.png"
+    )
+
+    template_horizon_path = (
+        project_root
+        / "Assets"
+        / "modele-cv-horizon.png"
+    )
+
+    cap_column, horizon_column = st.columns(2)
+
+    with cap_column:
+        st.image(
+            str(template_cap_path),
+            caption="Modèle Cap",
+            width=360,
+        )
+
+    with horizon_column:
+        st.image(
+            str(template_horizon_path),
+            caption="Modèle Horizon",
+            width=360,
+        )
+
+    selected_cv_template = st.radio(
+        "Choisis le modèle de ton CV adapté",
+        options=[
+            "Cap",
+            "Horizon",
+        ],
+        horizontal=True,
+        key=(
+            f"selected_cv_template_"
+            f"{summary_offer_signature}"
+        ),
+    )
+
+    st.html(
+        """
+    <style>
+        [data-testid="stFileUploaderDropzone"] {
+            background: #f1efff !important;
+            border: 1px dashed #4e30cd !important;
+            border-radius: 12px !important;
+        }
+
+        [data-testid="stFileUploaderDropzone"] div,
+        [data-testid="stFileUploaderDropzone"] span,
+        [data-testid="stFileUploaderDropzone"] small {
+            color: #090d67 !important;
+        }
+
+        [data-testid="stFileUploaderDropzone"] svg {
+            color: #4e30cd !important;
+            fill: #4e30cd !important;
+            stroke: #4e30cd !important;
+        }
+
+        [data-testid="stFileUploaderDropzone"] button {
+            border: none !important;
+            border-radius: 9px !important;
+
+            background: linear-gradient(
+                135deg,
+                #4e30cd,
+                #3926ff
+            ) !important;
+
+            color: #ffffff !important;
+        }
+
+        [data-testid="stFileUploaderDropzone"] button * {
+            color: #ffffff !important;
+        }
+
+        [data-testid="stFileUploaderDropzone"] button:hover {
+            box-shadow:
+                0 5px 14px rgba(57, 38, 255, 0.25)
+                !important;
+        }
+
+        [data-testid="stFileUploaderDropzoneInstructions"] small {
+            display: none;
+        }
+        </style>
+        """
+    )
+
+    st.markdown(
+        """
+        <h4 style="
+            color: #090d67;
+            margin-bottom: 0.5rem;
+        ">
+            Photo du CV — facultative
+        </h4>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.caption(
+        "Formats acceptés : JPG, JPEG ou PNG. "
+        "Dimensions recommandées : 600 × 600 pixels. "
+        "Dimensions minimales : 300 × 300 pixels. "
+        "Poids maximal : 2 Mo. "
+        "La photo sera automatiquement centrée et recadrée."
+    )
+
+    use_cv_photo = st.checkbox(
+        "Ajouter une photo à mon CV",
+        key=(
+            f"use_cv_photo_"
+            f"{summary_offer_signature}"
+        ),
+    )
+
+    cv_photo_data_uri = ""
+
+    if use_cv_photo:
+        uploaded_cv_photo = st.file_uploader(
+            "Choisir une photo",
+            type=[
+                "jpg",
+                "jpeg",
+                "png",
+            ],
+            key=(
+                f"uploaded_cv_photo_"
+                f"{summary_offer_signature}"
+            ),
+        )
+
+        if uploaded_cv_photo is not None:
+            cv_photo_bytes = (
+                uploaded_cv_photo.getvalue()
+            )
+
+            photo_is_too_large = (
+                len(cv_photo_bytes)
+                > 2 * 1024 * 1024
+            )
+
+            if photo_is_too_large:
+                st.error(
+                    "La photo dépasse 2 Mo. "
+                    "Choisis une image plus légère."
+                )
+
+            else:
+                try:
+                    with Image.open(
+                        BytesIO(cv_photo_bytes)
+                    ) as opened_photo:
+                        photo_width, photo_height = (
+                            opened_photo.size
+                        )
+
+                        opened_photo.verify()
+
+                except (
+                    UnidentifiedImageError,
+                    OSError,
+                ):
+                    st.error(
+                        "Le fichier ne semble pas être "
+                        "une image JPG ou PNG valide."
+                    )
+
+                else:
+                    photo_is_too_small = (
+                        photo_width < 300
+                        or photo_height < 300
+                    )
+
+                    if photo_is_too_small:
+                        st.error(
+                            "La photo est trop petite. "
+                            "Utilise une image d’au moins "
+                            "300 × 300 pixels."
+                        )
+
+                    else:
+                        photo_extension = (
+                            Path(
+                                uploaded_cv_photo.name
+                            )
+                            .suffix
+                            .casefold()
+                        )
+
+                        if photo_extension == ".png":
+                            photo_mime_type = "image/png"
+
+                        else:
+                            photo_mime_type = "image/jpeg"
+
+                        encoded_cv_photo = (
+                            base64.b64encode(
+                                cv_photo_bytes
+                            ).decode("ascii")
+                        )
+
+                        cv_photo_data_uri = (
+                            f"data:{photo_mime_type};"
+                            f"base64,{encoded_cv_photo}"
+                        )
+
+                        st.image(
+                            cv_photo_bytes,
+                            caption=(
+                                "Photo sélectionnée — "
+                                "aperçu avant recadrage"
+                            ),
+                            width=160,
+                        )
+
+                        st.success(
+                            "Photo prête à être intégrée : "
+                            f"{photo_width} × "
+                            f"{photo_height} pixels."
+                        )
 
     if preview_is_visible:
         preview_button_label = (
@@ -2221,30 +2804,30 @@ if valid_summary_items:
         for original_text, related_reformulations in (
             reformulations_by_original.items()
         ):
-            if original_text not in preview_cv_text:
+            flexible_original_pattern = r"\s+".join(
+                re.escape(text_part)
+                for text_part in original_text.split()
+            )
+
+            original_match = re.search(
+                flexible_original_pattern,
+                preview_cv_text,
+            )
+
+            if not original_match:
                 preview_warnings.append(
                     "La reformulation concernant "
                     f"« {original_text} » n’a pas pu "
                     "être replacée automatiquement."
                 )
                 continue
-            replacement_target = original_text
 
-            original_position = (
-                preview_cv_text.find(
-                    original_text
-                )
-            )
+            replacement_target = original_match.group(0)
 
-            punctuation_position = (
-                original_position
-                + len(original_text)
-            )
+            punctuation_position = original_match.end()
 
             if (
-                original_position >= 0
-                and punctuation_position
-                < len(preview_cv_text)
+                punctuation_position < len(preview_cv_text)
                 and preview_cv_text[
                     punctuation_position
                 ]
@@ -2379,7 +2962,11 @@ if valid_summary_items:
             # earlier fusion logic above.
 
         st.markdown(
-            "### Prévisualisation textuelle du CV adapté"
+            "### Prévisualisation du CV adapté"
+        )
+
+        st.caption(
+            f"Modèle sélectionné : {selected_cv_template}"
         )
 
         st.caption(
@@ -2394,22 +2981,883 @@ if valid_summary_items:
             )
         )
 
-        st.text_area(
-            "Contenu prévisualisé",
-            value=preview_cv_text,
-            height=620,
-            disabled=True,
-            key=(
-                f"adapted_cv_preview_"
-                f"{summary_offer_signature}_"
-                f"{preview_signature}"
-            ),
-        )
+        if selected_cv_template == "Cap":
+            def escape_cv_html(value):
+                return (
+                    str(value)
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace('"', "&quot;")
+                )
 
-        for preview_warning in preview_warnings:
-            st.warning(
-                preview_warning
+            cap_heading_map = {
+                "PROFIL": "profile",
+                "EXPÉRIENCE PROFESSIONNELLE": "experience",
+                "EXPÉRIENCES PROFESSIONNELLES": "experience",
+                "RÉALISATIONS WEB": "projects",
+                "PROJET TECHNIQUE": "projects",
+                "PROJET PERTINENT": "projects",
+                "PROJETS": "projects",
+                "COMPÉTENCES": "skills",
+                "COMPÉTENCES CIBLÉES": "skills",
+                "OUTILS": "tools",
+                "FORMATION": "training",
+                "LANGUES": "languages",
+                "LANGUES ET FORMATION": "languages_training",
+            }
+            cap_heading_map = {
+                normalize_heading(heading_name): section_name
+                for heading_name, section_name
+                in cap_heading_map.items()
+            }
+
+            cap_sections = {
+                "header": [],
+                "profile": [],
+                "experience": [],
+                "projects": [],
+                "skills": [],
+                "tools": [],
+                "training": [],
+                "languages": [],
+                "languages_training": [],
+            }
+
+            current_cap_section = "header"
+
+            for preview_line in preview_cv_text.splitlines():
+                clean_line = preview_line.strip()
+
+                if not clean_line:
+                    continue
+
+                normalized_heading = normalize_heading(
+                    clean_line.rstrip(":")
+                )
+
+                detected_section = cap_heading_map.get(
+                    normalized_heading
+                )
+
+                if detected_section:
+                    current_cap_section = detected_section
+                    continue
+
+                cap_sections[current_cap_section].append(
+                    clean_line
+                )
+
+            cap_header_lines = cap_sections["header"]
+
+            cap_name = "Prenom Nom"
+            cap_title = ""
+            cap_contact = ""
+
+            for header_line in cap_header_lines:
+                upper_header_line = header_line.upper()
+
+                if (
+                    not cap_contact
+                    and (
+                        "@" in header_line
+                        or "|" in header_line
+                    )
+                ):
+                    cap_contact = header_line
+                    continue
+
+                if (
+                    header_line == upper_header_line
+                    and not any(
+                        character.isdigit()
+                        for character in header_line
+                    )
+                    and "CANDIDATURE" not in upper_header_line
+                ):
+                    word_count = len(
+                        header_line.split()
+                    )
+
+                    if (
+                        cap_name == "Prenom Nom"
+                        and 2 <= word_count <= 5
+                    ):
+                        cap_name = header_line.title()
+
+                    elif not cap_title:
+                        cap_title = header_line
+
+            def build_cap_lines(lines):
+                return "".join(
+                    (
+                        '<div class="cv-cap-line">'
+                        + escape_cv_html(line)
+                        + "</div>"
+                    )
+                    for line in lines
+                )
+
+            def build_cap_section(title, section_key):
+                section_lines = cap_sections.get(
+                    section_key,
+                    [],
+                )
+
+                if not section_lines:
+                    return ""
+
+                return (
+                    '<section class="cv-cap-section">'
+                    f"<h3>{title}</h3>"
+                    + build_cap_lines(section_lines)
+                    + "</section>"
+                )
+
+            cap_main_content = (
+                build_cap_section(
+                    "Profil",
+                    "profile",
+                )
+                + build_cap_section(
+                    "Expériences professionnelles",
+                    "experience",
+                )
+                + build_cap_section(
+                    "Projets pertinents",
+                    "projects",
+                )
             )
+
+            cap_sidebar_content = (
+                build_cap_section(
+                    "Compétences",
+                    "skills",
+                )
+                + build_cap_section(
+                    "Outils",
+                    "tools",
+                )
+                + build_cap_section(
+                    "Formation",
+                    "training",
+                )
+                + build_cap_section(
+                    "Langues",
+                    "languages",
+                )
+                + build_cap_section(
+                    "Langues et formation",
+                    "languages_training",
+                )
+            )
+
+            cap_preview_document = (
+                """
+                <style>
+                    .cv-cap-page {
+                        max-width: 930px;
+                        min-height: 1120px;
+                        margin: 18px auto 28px;
+                        overflow: hidden;
+
+                        border: 1px solid #d9d5ff;
+                        border-radius: 8px;
+
+                        background: #ffffff;
+                        box-shadow:
+                            0 10px 28px rgba(9, 13, 103, 0.12);
+
+                        color: #090d67;
+                        font-family: Arial, sans-serif;
+                    }
+
+                    .cv-cap-header {
+                        display: grid;
+                        grid-template-columns: 145px 1fr;
+                        gap: 30px;
+                        align-items: center;
+
+                        min-height: 245px;
+                        padding: 34px 46px;
+
+                        background: linear-gradient(
+                            110deg,
+                            #090d67 0%,
+                            #3926ff 100%
+                        );
+
+                        color: #ffffff;
+                    }
+
+                    .cv-cap-frame {
+                        width: 116px;
+                        height: 145px;
+
+                        border: 2px solid rgba(255, 255, 255, 0.88);
+                        border-radius: 14px;
+                    }
+
+                    .cv-cap-name {
+                        margin-bottom: 8px;
+
+                        color: #ffffff;
+                        font-size: 38px;
+                        font-weight: 700;
+                    }
+
+                    .cv-cap-title {
+                        margin-bottom: 16px;
+
+                        color: #ffffff;
+                        font-size: 21px;
+                    }
+
+                    .cv-cap-contact {
+                        color: #ffffff;
+                        font-size: 14px;
+                    }
+
+                    .cv-cap-grid {
+                        display: grid;
+                        grid-template-columns:
+                            minmax(0, 1.75fr)
+                            minmax(230px, 0.85fr);
+                    }
+
+                    .cv-cap-main {
+                        padding: 38px 42px;
+                    }
+
+                    .cv-cap-sidebar {
+                        padding: 38px 32px;
+                        background: linear-gradient(
+                            180deg,
+                            #f5f3ff 0%,
+                            #ffffff 100%
+                        );
+                    }
+
+                    .cv-cap-section {
+                        margin-bottom: 30px;
+                    }
+
+                    .cv-cap-section h3 {
+                        margin: 0 0 14px;
+                        padding-bottom: 8px;
+
+                        border-bottom: 2px solid #3926ff;
+
+                        color: #090d67;
+                        font-size: 19px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                    }
+
+                    .cv-cap-line {
+                        margin: 0 0 8px;
+
+                        color: #202557;
+                        font-size: 14px;
+                        line-height: 1.55;
+                    }
+
+                    @media (max-width: 800px) {
+                        .cv-cap-header {
+                            grid-template-columns: 1fr;
+                        }
+
+                        .cv-cap-frame {
+                            display: none;
+                        }
+
+                        .cv-cap-grid {
+                            grid-template-columns: 1fr;
+                        }
+                    }
+                </style>
+
+                <div class="cv-cap-page">
+                    <div class="cv-cap-header">
+                        <div
+                            class="cv-cap-frame"
+                            aria-hidden="true"
+                        ></div>
+
+                        <div>
+                            <div class="cv-cap-name">
+                                __CAP_NAME__
+                            </div>
+
+                            <div class="cv-cap-title">
+                                __CAP_TITLE__
+                            </div>
+
+                            <div class="cv-cap-contact">
+                                __CAP_CONTACT__
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cv-cap-grid">
+                        <main class="cv-cap-main">
+                            __CAP_MAIN__
+                        </main>
+
+                        <aside class="cv-cap-sidebar">
+                            __CAP_SIDEBAR__
+                        </aside>
+                    </div>
+                </div>
+                """
+                .replace(
+                    "__CAP_NAME__",
+                    escape_cv_html(cap_name),
+                )
+                .replace(
+                    "__CAP_TITLE__",
+                    escape_cv_html(cap_title),
+                )
+                .replace(
+                    "__CAP_CONTACT__",
+                    escape_cv_html(cap_contact),
+                )
+                .replace(
+                    "__CAP_MAIN__",
+                    cap_main_content,
+                )
+                .replace(
+                    "__CAP_SIDEBAR__",
+                    cap_sidebar_content,
+                )
+            )
+
+            st.html(cap_preview_document)
+
+        else:
+            def escape_horizon_html(value):
+                return (
+                    str(value)
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace('"', "&quot;")
+                )
+
+            horizon_heading_map = {
+                normalize_heading("PROFIL"): "profile",
+                normalize_heading("À PROPOS"): "profile",
+                normalize_heading("RÉSUMÉ PROFESSIONNEL"): "profile",
+
+                normalize_heading(
+                    "EXPÉRIENCE PROFESSIONNELLE"
+                ): "experience",
+                normalize_heading(
+                    "EXPÉRIENCES PROFESSIONNELLES"
+                ): "experience",
+                normalize_heading(
+                    "PARCOURS PROFESSIONNEL"
+                ): "experience",
+                normalize_heading(
+                    "PARCOURS PROFESSIONNELS"
+                ): "experience",
+
+                normalize_heading("RÉALISATIONS WEB"): "projects",
+                normalize_heading("PROJET TECHNIQUE"): "projects",
+                normalize_heading("PROJET PERTINENT"): "projects",
+                normalize_heading("PROJETS PERTINENTS"): "projects",
+                normalize_heading("PROJETS"): "projects",
+
+                normalize_heading("COMPÉTENCES"): "skills",
+                normalize_heading("MES COMPÉTENCES"): "skills",
+                normalize_heading("COMPÉTENCES CIBLÉES"): "skills",
+                normalize_heading(
+                    "COMPÉTENCES PROFESSIONNELLES"
+                ): "skills",
+
+                normalize_heading("OUTILS"): "tools",
+                normalize_heading("OUTILS INFORMATIQUES"): "tools",
+
+                normalize_heading("FORMATION"): "training",
+                normalize_heading("FORMATIONS"): "training",
+                normalize_heading("DIPLÔMES"): "training",
+
+                normalize_heading("LANGUES"): "languages",
+                normalize_heading(
+                    "LANGUES ET FORMATION"
+                ): "languages_training",
+                normalize_heading(
+                    "CENTRES D’INTÉRÊT"
+                ): "interests",
+            }
+
+            horizon_sections = {
+                "header": [],
+                "profile": [],
+                "experience": [],
+                "projects": [],
+                "skills": [],
+                "tools": [],
+                "training": [],
+                "languages": [],
+                "languages_training": [],
+                "interests": [],
+            }
+
+            current_horizon_section = "header"
+            horizon_contact_lines = []
+
+            for preview_line in preview_cv_text.splitlines():
+                clean_line = preview_line.strip()
+
+                if not clean_line:
+                    continue
+
+                normalized_heading = normalize_heading(
+                    clean_line.rstrip(":")
+                )
+
+                heading_signature = "".join(
+                    character
+                    for character in normalized_heading
+                    if character.isalnum()
+                )
+
+                if heading_signature.startswith(
+                    ("centredint", "centresdint")
+                ):
+                    detected_section = "interests"
+                else:
+                    detected_section = next(
+                        (
+                            section_name
+                            for heading_name, section_name
+                            in horizon_heading_map.items()
+                            if "".join(
+                                character
+                                for character in heading_name
+                                if character.isalnum()
+                            )
+                            == heading_signature
+                        ),
+                        None,
+                    )
+
+                if (
+                    detected_section
+                    and len(normalized_heading.split()) == 1
+                    and clean_line[0].islower()
+                ):
+                    detected_section = None
+
+                if detected_section:
+                    current_horizon_section = detected_section
+                    continue
+
+                normalized_contact_line = normalize_heading(
+                    clean_line
+                )
+
+                contact_prefixes = (
+                    "mail",
+                    "email",
+                    "courriel",
+                    "telephone",
+                    "tel",
+                    "numero",
+                )
+
+                line_is_contact = (
+                    "@" in clean_line
+                    or any(
+                        normalized_contact_line == prefix
+                        or normalized_contact_line.startswith(
+                            prefix + " "
+                        )
+                        for prefix in contact_prefixes
+                    )
+                )
+
+                if line_is_contact:
+                    horizon_contact_lines.append(clean_line)
+                    continue
+
+                horizon_sections[
+                    current_horizon_section
+                ].append(clean_line)
+
+            horizon_header_lines = horizon_sections["header"]
+
+            horizon_name = "Prenom Nom"
+            horizon_title = ""
+            horizon_contact = " | ".join(
+                dict.fromkeys(horizon_contact_lines)
+            )
+
+            identity_candidates = []
+
+            for header_line in horizon_header_lines:
+                normalized_header_line = normalize_heading(
+                    header_line
+                )
+
+                if "candidature" in normalized_header_line:
+                    continue
+
+                identity_candidates.append(header_line)
+
+            def is_letter_spaced_identity(value):
+                identity_words = [
+                    word.strip(" .,:;|-/")
+                    for word in value.split()
+                    if word.strip(" .,:;|-/")
+                ]
+
+                single_letter_words = [
+                    word
+                    for word in identity_words
+                    if len(word) == 1 and word.isalpha()
+                ]
+
+                return (
+                    len(identity_words) >= 6
+                    and len(single_letter_words)
+                    >= int(len(identity_words) * 0.70)
+                )
+
+            selected_name_line = ""
+
+            for identity_line in identity_candidates:
+                if is_letter_spaced_identity(identity_line):
+                    continue
+
+                identity_word_count = len(
+                    identity_line.split()
+                )
+
+                if 2 <= identity_word_count <= 6:
+                    if identity_line == identity_line.upper():
+                        horizon_name = identity_line.title()
+                    else:
+                        horizon_name = identity_line
+
+                    selected_name_line = identity_line
+                    break
+
+            for identity_line in identity_candidates:
+                if identity_line == selected_name_line:
+                    continue
+
+                horizon_title = identity_line
+                break
+
+            def build_horizon_lines(lines):
+                return "".join(
+                    (
+                        '<div class="cv-horizon-line">'
+                        + escape_horizon_html(line)
+                        + "</div>"
+                    )
+                    for line in lines
+                )
+
+            def build_horizon_section(
+                title,
+                section_key,
+            ):
+                section_lines = horizon_sections.get(
+                    section_key,
+                    [],
+                )
+
+                if not section_lines:
+                    return ""
+
+                return (
+                    '<section class="cv-horizon-section">'
+                    f"<h3>{title}</h3>"
+                    + build_horizon_lines(section_lines)
+                    + "</section>"
+                )
+
+            horizon_main_content = (
+                build_horizon_section(
+                    "Profil",
+                    "profile",
+                )
+                + build_horizon_section(
+                    "Expériences professionnelles",
+                    "experience",
+                )
+                + build_horizon_section(
+                    "Projets pertinents",
+                    "projects",
+                )
+            )
+
+            horizon_sidebar_content = (
+                build_horizon_section(
+                    "Compétences",
+                    "skills",
+                )
+                + build_horizon_section(
+                    "Outils",
+                    "tools",
+                )
+                + build_horizon_section(
+                    "Formation",
+                    "training",
+                )
+                + build_horizon_section(
+                    "Langues",
+                    "languages",
+                )
+                + build_horizon_section(
+                    "Langues et formation",
+                    "languages_training",
+                )
+                + build_horizon_section(
+                    "Centres d’intérêt",
+                    "interests",
+                )
+            )
+
+            horizon_preview_document = (
+                """
+                <style>
+                    .cv-horizon-page {
+                        max-width: 930px;
+                        min-height: 1120px;
+                        margin: 18px auto 28px;
+                        overflow: hidden;
+
+                        border: 1px solid #d9d5ff;
+                        border-radius: 8px;
+
+                        background: #ffffff;
+                        box-shadow:
+                            0 10px 28px rgba(9, 13, 103, 0.12);
+
+                        color: #090d67;
+                        font-family: Arial, sans-serif;
+                    }
+
+                    .cv-horizon-header {
+                        position: relative;
+
+                        display: grid;
+                        grid-template-columns: 145px 1fr;
+                        gap: 30px;
+                        align-items: center;
+
+                        min-height: 250px;
+                        padding: 36px 48px 58px;
+                        overflow: hidden;
+                    }
+
+                    .cv-horizon-header::before {
+                        position: absolute;
+                        top: -145px;
+                        right: -100px;
+
+                        width: 540px;
+                        height: 330px;
+
+                        border-radius: 50%;
+
+                        background: radial-gradient(
+                            circle at center,
+                            rgba(78, 48, 205, 0.28) 0%,
+                            rgba(57, 38, 255, 0.10) 52%,
+                            rgba(255, 255, 255, 0) 72%
+                        );
+
+                        content: "";
+                    }
+
+                    .cv-horizon-curve {
+                        position: absolute;
+                        right: -8%;
+                        bottom: 18px;
+                        left: -8%;
+
+                        height: 90px;
+
+                        border-bottom: 2px solid #22bfc4;
+                        border-radius: 0 0 55% 55%;
+
+                        transform: rotate(-2deg);
+                    }
+
+                    .cv-horizon-frame {
+                        position: relative;
+                        z-index: 1;
+
+                        width: 116px;
+                        height: 116px;
+
+                        border: 2px solid #4e30cd;
+                        border-radius: 50%;
+
+                        background: #ffffff;
+                    }
+
+                    .cv-horizon-identity {
+                        position: relative;
+                        z-index: 1;
+                    }
+
+                    .cv-horizon-name {
+                        margin-bottom: 8px;
+
+                        color: #090d67;
+                        font-size: 38px;
+                        font-weight: 700;
+                    }
+
+                    .cv-horizon-title {
+                        margin-bottom: 16px;
+
+                        color: #3926ff;
+                        font-size: 21px;
+                    }
+
+                    .cv-horizon-contact {
+                        color: #343a72;
+                        font-size: 14px;
+                    }
+
+                    .cv-horizon-grid {
+                        display: grid;
+                        grid-template-columns:
+                            minmax(0, 1.7fr)
+                            minmax(230px, 0.85fr);
+                        gap: 30px;
+
+                        padding: 24px 42px 42px;
+                    }
+
+                    .cv-horizon-main {
+                        padding-top: 8px;
+                    }
+
+                    .cv-horizon-sidebar {
+                        padding: 30px 28px;
+
+                        border-radius: 28px;
+
+                        background: linear-gradient(
+                            180deg,
+                            #f3f0ff 0%,
+                            #faf9ff 100%
+                        );
+                    }
+
+                    .cv-horizon-section {
+                        margin-bottom: 30px;
+                    }
+
+                    .cv-horizon-section h3 {
+                        margin: 0 0 14px;
+                        padding-bottom: 8px;
+
+                        border-bottom: 1px solid #8e80ff;
+
+                        color: #3926ff;
+                        font-size: 18px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                    }
+
+                    .cv-horizon-line {
+                        margin: 0 0 8px;
+
+                        color: #202557;
+                        font-size: 14px;
+                        line-height: 1.55;
+                    }
+
+                    @media (max-width: 800px) {
+                        .cv-horizon-header {
+                            grid-template-columns: 1fr;
+                        }
+
+                        .cv-horizon-frame {
+                            display: none;
+                        }
+
+                        .cv-horizon-grid {
+                            grid-template-columns: 1fr;
+                        }
+                    }
+                </style>
+
+                <div class="cv-horizon-page">
+                    <header class="cv-horizon-header">
+                        <div
+                            class="cv-horizon-frame"
+                            aria-hidden="true"
+                        ></div>
+
+                        <div class="cv-horizon-identity">
+                            <div class="cv-horizon-name">
+                                __HORIZON_NAME__
+                            </div>
+
+                            <div class="cv-horizon-title">
+                                __HORIZON_TITLE__
+                            </div>
+
+                            <div class="cv-horizon-contact">
+                                __HORIZON_CONTACT__
+                            </div>
+                        </div>
+
+                        <div
+                            class="cv-horizon-curve"
+                            aria-hidden="true"
+                        ></div>
+                    </header>
+
+                    <div class="cv-horizon-grid">
+                        <main class="cv-horizon-main">
+                            __HORIZON_MAIN__
+                        </main>
+
+                        <aside class="cv-horizon-sidebar">
+                            __HORIZON_SIDEBAR__
+                        </aside>
+                    </div>
+                </div>
+                """
+                .replace(
+                    "__HORIZON_NAME__",
+                    escape_horizon_html(horizon_name),
+                )
+                .replace(
+                    "__HORIZON_TITLE__",
+                    escape_horizon_html(horizon_title),
+                )
+                .replace(
+                    "__HORIZON_CONTACT__",
+                    escape_horizon_html(horizon_contact),
+                )
+                .replace(
+                    "__HORIZON_MAIN__",
+                    horizon_main_content,
+                )
+                .replace(
+                    "__HORIZON_SIDEBAR__",
+                    horizon_sidebar_content,
+                )
+            )
+
+            st.html(horizon_preview_document)
+
+            for preview_warning in preview_warnings:
+                st.warning(
+                    preview_warning
+                )
 
 if st.button(
     "Retour à Héphaïstos",

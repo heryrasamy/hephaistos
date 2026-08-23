@@ -1,4 +1,7 @@
+
 from __future__ import annotations
+
+import re
 
 from typing import Any, Dict, List, Set
 
@@ -43,18 +46,35 @@ def _contains_any(text: str, keywords: List[str]) -> bool:
 # ---------------------------------------------------------
 # Règles génériques
 # ---------------------------------------------------------
-DRIVING_KEYWORDS = [
-    "permis b",
-    "permis",
-    "conduite",
-    "véhicule",
-    "vehicule",
-    "livraison",
-    "déplacement",
-    "deplacement",
-    "tournée",
-    "tournee",
-]
+DRIVING_REQUIREMENT_PATTERNS = (
+    r"\bpermis\s*:?\s*(?:b|c|d|e)\b",
+    r"\bpermis\s+de\s+conduire\b",
+    (
+        r"\bpermis\s+"
+        r"(?:obligatoire|exig[ée]|requis|indispensable)\b"
+    ),
+    (
+        r"\bv[ée]hicule\s+"
+        r"(?:personnel|obligatoire|exig[ée]|requis|indispensable)\b"
+    ),
+    (
+        r"\b(?:conduire|conduite)\s+"
+        r"(?:un|une|de|d['’])?\s*"
+        r"(?:v[ée]hicule|voiture|camion|utilitaire)\b"
+    ),
+    r"\b(?:chauffeur|chauffeuse|livreur|livreuse)\b",
+    (
+        r"\bconduct(?:eur|rice)\s+"
+        r"(?:routier|routi[èe]re|de\s+bus|de\s+car|poids\s+lourd)\b"
+    ),
+)
+
+CANDIDATE_LICENSE_PATTERNS = (
+    r"\bpermis\s*:?\s*(?:b|c|d|e)\b",
+    r"\bpermis\s+de\s+conduire\b",
+    r"\btitulaire\s+du\s+permis\b",
+    r"\bv[ée]hicul[ée]\b",
+)
 
 EXPERIENCE_KEYWORDS = [
     "expérience exigée",
@@ -97,9 +117,9 @@ def extract_candidate_signals(cv_text: str, cv_terms: List[str] | Set[str] | Non
     cv_text = (cv_text or "").lower()
     cv_terms_set = _to_set(cv_terms)
 
-    has_driving_license = (
-        _contains_any(cv_text, ["permis b", "permis", "conduite"])
-        or any(term in cv_terms_set for term in {"permis b", "permis", "conduite"})
+    has_driving_license = _matches_any_pattern(
+        cv_text,
+        CANDIDATE_LICENSE_PATTERNS,
     )
 
     return {
@@ -107,6 +127,21 @@ def extract_candidate_signals(cv_text: str, cv_terms: List[str] | Set[str] | Non
         "cv_terms": cv_terms_set,
     }
 
+def _matches_any_pattern(
+    text: str,
+    patterns,
+) -> bool:
+    if not text:
+        return False
+
+    return any(
+        re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        )
+        for pattern in patterns
+    )
 
 def extract_offer_signals(
     offer_title: str,
@@ -123,8 +158,16 @@ def extract_offer_signals(
     offer_terms_set = _to_set(offer_terms)
 
     requires_driving = (
-        _contains_any(full_text, DRIVING_KEYWORDS)
-        or any(term in offer_terms_set for term in {"livraison", "conduite", "véhicule", "vehicule"})
+        _matches_any_pattern(full_text, DRIVING_REQUIREMENT_PATTERNS)
+        or any(
+            term in offer_terms_set
+            for term in {
+                "livraison",
+                "conduite",
+                "véhicule",
+                "vehicule",
+            }
+        )
     )
 
     seems_accessible = _contains_any(full_text, ACCESSIBILITY_KEYWORDS) or _contains_any(full_text, TRAINING_KEYWORDS)
