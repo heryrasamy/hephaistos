@@ -458,7 +458,7 @@ st.html(
         sea_base64,
     )
 )
-    
+
 offer_text = st.session_state.get(
     "cv_adaptation_offer_text",
     "",
@@ -2081,39 +2081,96 @@ else:
                                             "Rigueur": "la rigueur",
                                         }
 
-                                        if category == "soft_skill":
-                                            normalized_confirmed_facts = [
-                                                soft_skill_wording.get(
-                                                    fact,
-                                                    (
-                                                        fact[:1].lower()
-                                                        + fact[1:]
-                                                    ),
-                                                )
-                                                for fact in confirmed_facts
-                                                if fact
-                                            ]
-                                        else:
-                                            normalized_confirmed_facts = [
-                                                (
-                                                    fact[:1].lower()
-                                                    + fact[1:]
-                                                )
-                                                for fact
-                                                in confirmed_facts
-                                                if fact
-                                            ]
+                                        normalized_confirmed_facts = []
 
-                                        if (
-                                            len(
-                                                normalized_confirmed_facts
+                                        for fact in confirmed_facts:
+                                            clean_fact = str(fact).strip()
+
+                                            while (
+                                                clean_fact
+                                                and not clean_fact[0].isalnum()
+                                            ):
+                                                clean_fact = (
+                                                    clean_fact[1:].lstrip()
+                                                )
+
+                                            if not clean_fact:
+                                                continue
+
+                                            if category == "soft_skill":
+                                                displayed_fact = (
+                                                    soft_skill_wording.get(
+                                                        clean_fact,
+                                                        clean_fact[:1].lower()
+                                                        + clean_fact[1:],
+                                                    )
+                                                )
+                                            else:
+                                                displayed_fact = (
+                                                    clean_fact[:1].lower()
+                                                    + clean_fact[1:]
+                                                )
+
+                                            normalized_confirmed_facts.append(
+                                                displayed_fact
                                             )
+
+                                        normalized_base_words = set(
+                                            re.findall(
+                                                r"[a-z0-9]+",
+                                                normalize_heading(base_text),
+                                            )
+                                        )
+
+                                        filtered_confirmed_facts = []
+                                        seen_fact_signatures = set()
+
+                                        for fact in normalized_confirmed_facts:
+                                            fact_words = set(
+                                                re.findall(
+                                                    r"[a-z0-9]+",
+                                                    normalize_heading(fact),
+                                                )
+                                            )
+
+                                            fact_signature = tuple(
+                                                sorted(fact_words)
+                                            )
+                                            fact_is_already_visible = (
+                                                fact_words
+                                                and fact_words.issubset(
+                                                    normalized_base_words
+                                                )
+                                            )
+
+                                            if (
+                                                not fact_words
+                                                or fact_is_already_visible
+                                                or fact_signature
+                                                in seen_fact_signatures
+                                            ):
+                                                continue
+
+                                            seen_fact_signatures.add(
+                                                fact_signature
+                                            )
+                                            filtered_confirmed_facts.append(
+                                                fact
+                                            )
+
+                                        normalized_confirmed_facts = (
+                                            filtered_confirmed_facts
+                                        )
+
+                                        if not normalized_confirmed_facts:
+                                            joined_facts = ""
+                                        elif (
+                                            len(normalized_confirmed_facts)
                                             == 1
                                         ):
                                             joined_facts = (
                                                 normalized_confirmed_facts[0]
                                             )
-
                                         else:
                                             joined_facts = (
                                                 ", ".join(
@@ -2122,33 +2179,36 @@ else:
                                                     ]
                                                 )
                                                 + " et "
-                                                + normalized_confirmed_facts[
-                                                    -1
-                                                ]
+                                                + normalized_confirmed_facts[-1]
                                             )
 
-                                        if category == "soft_skill":
+                                        base_sentence = base_text.rstrip(
+                                            " .;"
+                                        )
+
+                                        if (
+                                            category == "specifique_metier"
+                                            or not joined_facts
+                                        ):
                                             proposed_reformulation = (
-                                                f"{base_text} — mission "
+                                                f"{base_sentence}."
+                                            )
+                                        elif category == "soft_skill":
+                                            proposed_reformulation = (
+                                                f"{base_sentence} — mission "
                                                 f"mobilisant {joined_facts}."
                                             )
-
                                         elif category == (
                                             "organisation_coordination"
                                         ):
                                             proposed_reformulation = (
-                                                f"{base_text} — "
+                                                f"{base_sentence} — "
                                                 "responsabilités incluant "
                                                 f"{joined_facts}."
                                             )
-                                        elif category == "specifique_metier":
-                                            proposed_reformulation = (
-                                                f"{base_text}."
-                                            )
-
                                         else:
                                             proposed_reformulation = (
-                                                f"{base_text} — "
+                                                f"{base_sentence} — "
                                                 f"{joined_facts}."
                                             )
 
@@ -2172,7 +2232,7 @@ else:
                                             value=proposed_reformulation,
                                             key=(
                                                 f"{evidence_key}_"
-                                                f"reformulation_"
+                                                f"reformulation_v3_"
                                                 f"{selected_index}_"
                                                 f"{facts_signature}"
                                             ),
@@ -2890,8 +2950,15 @@ if valid_summary_items:
                 " .;"
             )
 
-            normalized_base_text = (
-                base_text_for_merge.casefold()
+            normalized_base_text = normalize_heading(
+                base_text_for_merge
+            )
+
+            normalized_base_words = set(
+                re.findall(
+                    r"[a-z0-9]+",
+                    normalized_base_text,
+                )
             )
 
             facts_to_append = []
@@ -3151,6 +3218,20 @@ if valid_summary_items:
                     "languages_training",
                 )
             )
+            cap_header_class = "cv-cap-header"
+
+            if not cv_photo_data_uri:
+                cap_header_class += (
+                    " cv-cap-header--without-photo"
+                )
+            cap_photo_html = ""
+
+            if cv_photo_data_uri:
+                cap_photo_html = (
+                    '<img class="cv-cap-photo" '
+                    f'src="{cv_photo_data_uri}" '
+                    'alt="">'
+                )
 
             cap_preview_document = (
                 """
@@ -3189,13 +3270,32 @@ if valid_summary_items:
 
                         color: #ffffff;
                     }
+                    .cv-cap-header--without-photo {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .cv-cap-header--without-photo
+                    .cv-cap-frame {
+                        display: none;
+                    }
 
                     .cv-cap-frame {
                         width: 116px;
                         height: 145px;
+                        overflow: hidden;
 
                         border: 2px solid rgba(255, 255, 255, 0.88);
                         border-radius: 14px;
+                        }
+
+                        .cv-cap-photo {
+                        display: block;
+                        width: 100%;
+                        height: 100%;
+
+                        object-fit: cover;
+                        object-position: center;
+
                     }
 
                     .cv-cap-name {
@@ -3278,11 +3378,14 @@ if valid_summary_items:
                 </style>
 
                 <div class="cv-cap-page">
-                    <div class="cv-cap-header">
+                        <div class="__CAP_HEADER_CLASS__">
                         <div
                             class="cv-cap-frame"
                             aria-hidden="true"
-                        ></div>
+                        >
+                            __CAP_PHOTO__
+
+                            </div>
 
                         <div>
                             <div class="cv-cap-name">
@@ -3315,6 +3418,14 @@ if valid_summary_items:
                     escape_cv_html(cap_name),
                 )
                 .replace(
+                    "__CAP_HEADER_CLASS__",
+                    cap_header_class,
+                )
+                .replace(
+                    "__CAP_PHOTO__",
+                    cap_photo_html,
+                )
+                .replace(
                     "__CAP_TITLE__",
                     escape_cv_html(cap_title),
                 )
@@ -3333,6 +3444,40 @@ if valid_summary_items:
             )
 
             st.html(cap_preview_document)
+
+            if st.button(
+                "Comparer et valider mon CV",
+                key=(
+                    f"open_cv_validation_cap_"
+                    f"{summary_offer_signature}"
+                ),
+                type="primary",
+            ):
+                st.session_state["cv_validation_payload"] = {
+                    "original_file_bytes": st.session_state.get(
+                        "cv_original_file_bytes",
+                        b"",
+                    ),
+                    "original_file_name": st.session_state.get(
+                        "cv_original_file_name",
+                        "",
+                    ),
+                    "original_file_type": st.session_state.get(
+                        "cv_original_file_type",
+                        "",
+                    ),
+                    "original_text": cv_original_text,
+                    "template": selected_cv_template,
+                    "adapted_text": preview_cv_text,
+                    "final_html": cap_preview_document,
+                    "photo_data_uri": cv_photo_data_uri,
+                    "offer_signature": summary_offer_signature,
+                    "reformulations": valid_summary_items,
+                }
+
+                st.switch_page(
+                    "pages/validation_cv.py"
+                )
 
         else:
             def escape_horizon_html(value):
@@ -3621,6 +3766,23 @@ if valid_summary_items:
                     "interests",
                 )
             )
+            horizon_header_class = (
+                "cv-horizon-header"
+            )
+
+            if not cv_photo_data_uri:
+                horizon_header_class += (
+                    " cv-horizon-header--without-photo"
+                )
+
+            horizon_photo_html = ""
+
+            if cv_photo_data_uri:
+                horizon_photo_html = (
+                    '<img class="cv-horizon-photo" '
+                    f'src="{cv_photo_data_uri}" '
+                    'alt="">'
+                )
 
             horizon_preview_document = (
                 """
@@ -3655,6 +3817,14 @@ if valid_summary_items:
                         overflow: hidden;
                     }
 
+                     .cv-horizon-header--without-photo {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .cv-horizon-header--without-photo
+                    .cv-horizon-frame {
+                        display: none;
+                    }
                     .cv-horizon-header::before {
                         position: absolute;
                         top: -145px;
@@ -3700,6 +3870,16 @@ if valid_summary_items:
                         border-radius: 50%;
 
                         background: #ffffff;
+                    }
+
+
+                    .cv-horizon-photo {
+                        display: block;
+                        width: 100%;
+                        height: 100%;
+
+                        object-fit: cover;
+                        object-position: center;
                     }
 
                     .cv-horizon-identity {
@@ -3793,11 +3973,14 @@ if valid_summary_items:
                 </style>
 
                 <div class="cv-horizon-page">
-                    <header class="cv-horizon-header">
+                        <header class="__HORIZON_HEADER_CLASS__">
+
                         <div
                             class="cv-horizon-frame"
                             aria-hidden="true"
-                        ></div>
+                        >
+                            __HORIZON_PHOTO__
+                        </div>
 
                         <div class="cv-horizon-identity">
                             <div class="cv-horizon-name">
@@ -3831,6 +4014,15 @@ if valid_summary_items:
                 </div>
                 """
                 .replace(
+                    "__HORIZON_HEADER_CLASS__",
+                    horizon_header_class,
+                )
+
+                .replace(
+                    "__HORIZON_PHOTO__",
+                    horizon_photo_html,
+                )
+                .replace(
                     "__HORIZON_NAME__",
                     escape_horizon_html(horizon_name),
                 )
@@ -3853,6 +4045,40 @@ if valid_summary_items:
             )
 
             st.html(horizon_preview_document)
+
+            if st.button(
+                "Comparer et valider mon CV",
+                key=(
+                    f"open_cv_validation_horizon_"
+                    f"{summary_offer_signature}"
+                ),
+                type="primary",
+            ):
+                st.session_state["cv_validation_payload"] = {
+                    "original_file_bytes": st.session_state.get(
+                        "cv_original_file_bytes",
+                        b"",
+                    ),
+                    "original_file_name": st.session_state.get(
+                        "cv_original_file_name",
+                        "",
+                    ),
+                    "original_file_type": st.session_state.get(
+                        "cv_original_file_type",
+                        "",
+                    ),
+                    "original_text": cv_original_text,
+                    "template": selected_cv_template,
+                    "adapted_text": preview_cv_text,
+                    "final_html": horizon_preview_document,
+                    "photo_data_uri": cv_photo_data_uri,
+                    "offer_signature": summary_offer_signature,
+                    "reformulations": valid_summary_items,
+                }
+
+                st.switch_page(
+                    "pages/validation_cv.py"
+                )
 
             for preview_warning in preview_warnings:
                 st.warning(

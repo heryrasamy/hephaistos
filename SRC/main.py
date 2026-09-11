@@ -1899,10 +1899,15 @@ if uploaded:
     if not file_bytes:
         st.error("Fichier vide ou illisible. Recharge le CV.")
         st.stop()
+    st.session_state["cv_original_file_bytes"] = file_bytes
+    st.session_state["cv_original_file_name"] = uploaded.name
+    st.session_state["cv_original_file_type"] = (
+        uploaded.type or ""
+    )
 
     cv_text = to_text(extract_text_from_upload(uploaded.name, file_bytes))
     st.session_state["cv_original_text"] = cv_text
- 
+
     # ------------------------
     # Reset seulement si nouveau fichier
     # ------------------------
