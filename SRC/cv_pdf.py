@@ -74,65 +74,34 @@ def _parse_horizon_text(cv_text):
     heading_map = {
         _normalize_heading("PROFIL"): "profile",
         _normalize_heading("À PROPOS"): "profile",
-        _normalize_heading(
-            "RÉSUMÉ PROFESSIONNEL"
-        ): "profile",
-
-        _normalize_heading(
-            "EXPÉRIENCE PROFESSIONNELLE"
-        ): "experience",
-        _normalize_heading(
-            "EXPÉRIENCES PROFESSIONNELLES"
-        ): "experience",
-        _normalize_heading(
-            "PARCOURS PROFESSIONNEL"
-        ): "experience",
-        _normalize_heading(
-            "PARCOURS PROFESSIONNELS"
-        ): "experience",
-
-        _normalize_heading(
-            "RÉALISATIONS WEB"
-        ): "projects",
-        _normalize_heading(
-            "PROJET TECHNIQUE"
-        ): "projects",
-        _normalize_heading(
-            "PROJET PERTINENT"
-        ): "projects",
-        _normalize_heading(
-            "PROJETS PERTINENTS"
-        ): "projects",
+        _normalize_heading("RÉSUMÉ PROFESSIONNEL"): "profile",
+        _normalize_heading("EXPÉRIENCE PROFESSIONNELLE"): "experience",
+        _normalize_heading("EXPÉRIENCES PROFESSIONNELLES"): "experience",
+        _normalize_heading("PARCOURS PROFESSIONNEL"): "experience",
+        _normalize_heading("EXPÉRIENCE COMMERCIALE"): "experience",
+        _normalize_heading("EXPÉRIENCES COMMERCIALES"): "experience",
+        _normalize_heading("AUTRE EXPÉRIENCE PROFESSIONNELLE"): "experience",
+        _normalize_heading("AUTRES EXPÉRIENCES PROFESSIONNELLES"): "experience",
+        _normalize_heading("PARCOURS PROFESSIONNELS"): "experience",
+        _normalize_heading("RÉALISATIONS WEB"): "projects",
+        _normalize_heading("PROJET TECHNIQUE"): "projects",
+        _normalize_heading("PROJET PERTINENT"): "projects",
+        _normalize_heading("PROJETS PERTINENTS"): "projects",
         _normalize_heading("PROJETS"): "projects",
-
         _normalize_heading("COMPÉTENCES"): "skills",
-        _normalize_heading(
-            "MES COMPÉTENCES"
-        ): "skills",
-        _normalize_heading(
-            "COMPÉTENCES CIBLÉES"
-        ): "skills",
-        _normalize_heading(
-            "COMPÉTENCES PROFESSIONNELLES"
-        ): "skills",
-
+        _normalize_heading("MES COMPÉTENCES"): "skills",
+        _normalize_heading("COMPÉTENCES CIBLÉES"): "skills",
+        _normalize_heading("COMPÉTENCES PROFESSIONNELLES"): "skills",
+        _normalize_heading("QUALITÉ"): "skills",
+        _normalize_heading("QUALITÉS"): "skills",
         _normalize_heading("OUTILS"): "tools",
-        _normalize_heading(
-            "OUTILS INFORMATIQUES"
-        ): "tools",
-
+        _normalize_heading("OUTILS INFORMATIQUES"): "tools",
         _normalize_heading("FORMATION"): "training",
         _normalize_heading("FORMATIONS"): "training",
         _normalize_heading("DIPLÔMES"): "training",
-
         _normalize_heading("LANGUES"): "languages",
-        _normalize_heading(
-            "LANGUES ET FORMATION"
-        ): "languages_training",
-
-        _normalize_heading(
-            "CENTRES D'INTÉRÊT"
-        ): "interests",
+        _normalize_heading("LANGUES ET FORMATION"): "languages_training",
+        _normalize_heading("CENTRES D'INTÉRÊT"): "interests",
     }
 
     sections = {
@@ -151,6 +120,8 @@ def _parse_horizon_text(cv_text):
     current_section = "header"
     contact_lines = []
 
+    contact_block_is_active = False
+
     for source_line in str(cv_text).splitlines():
         clean_line = source_line.strip()
 
@@ -160,6 +131,14 @@ def _parse_horizon_text(cv_text):
         normalized_heading = _normalize_heading(
             clean_line.rstrip(":")
         )
+
+        if normalized_heading in {
+            "coordonnees",
+            "contact",
+            "informations personnelles",
+        }:
+            contact_block_is_active = True
+            continue
         if (
             "candidature" in normalized_heading
             and "mobilite" in normalized_heading
@@ -201,6 +180,7 @@ def _parse_horizon_text(cv_text):
 
         if detected_section:
             current_section = detected_section
+            contact_block_is_active = False
             continue
 
         normalized_contact = _normalize_heading(
@@ -217,7 +197,8 @@ def _parse_horizon_text(cv_text):
         )
 
         line_is_contact = (
-            "@" in clean_line
+            contact_block_is_active
+            or "@" in clean_line
             or any(
                 normalized_contact == prefix
                 or normalized_contact.startswith(
