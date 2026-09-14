@@ -124,8 +124,11 @@ FAMILY_KEYWORDS: Dict[str, set[str]] = {
         "formateur", "formation", "pedagogie", "tuteur",
     },
     "Culture & Création": {
-        "art", "artistique", "concert", "culture", "musee", "musique",
+        "art", "artiste", "artistique",
+        "chant", "chanteur", "chanteuse",
+        "concert", "culture", "musee", "musique",
         "orchestre", "patrimoine", "spectacle", "violon",
+        "vocal", "vocale",
     },
 }
 
@@ -214,22 +217,60 @@ def build_job_inference_summary(
     cv_terms: List[str],
     top_n: int = 3,
 ) -> Dict[str, object]:
-    """Construit une première synthèse métier à partir des familles détectées."""
+    """Construit une synthèse métier à partir des familles et du contenu du CV."""
     families = (detected_families or [])[:top_n]
     ranked_jobs: List[Dict[str, str]] = []
 
+    normalized_cv_words = set(
+        normalize_text(
+            " ".join(str(term) for term in (cv_terms or []))
+        ).split()
+    )
+
+    singer_signals = {
+        "chant",
+        "chanteur",
+        "chanteurs",
+        "chanteuse",
+        "chanteuses",
+        "vocal",
+        "vocale",
+        "vocaux",
+        "vocales",
+    }
+
+    if (
+        "Culture & Création" in families
+        and normalized_cv_words & singer_signals
+    ):
+        ranked_jobs.append({
+            "job": "chanteur",
+            "domain": "chant",
+            "family": "Culture & Création",
+        })
+
     for family in families:
         for job_label, domain in JOB_FAMILY_TO_ROLES.get(family, []):
-            ranked_jobs.append({
-                "job": job_label,
-                "domain": domain,
-                "family": family,
-            })
+            already_present = any(
+                item.get("job") == job_label
+                for item in ranked_jobs
+            )
+
+            if not already_present:
+                ranked_jobs.append({
+                    "job": job_label,
+                    "domain": domain,
+                    "family": family,
+                })
 
     main_job = (
         ranked_jobs[0]
         if ranked_jobs
-        else {"job": "inconnu", "domain": "inconnu", "family": ""}
+        else {
+            "job": "inconnu",
+            "domain": "inconnu",
+            "family": "",
+        }
     )
 
     return {
